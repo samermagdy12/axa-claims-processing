@@ -5,6 +5,8 @@ import { Layout } from './components/Layout';
 // Auth
 import LandingPage from './screens/auth/LandingPage';
 import SignUpPage from './screens/auth/SignUpPage';
+import PolicyVerification from './screens/auth/PolicyVerification';
+import type { Policy } from './types';
 
 // Customer
 import CustomerHome from './screens/customer/CustomerHome';
@@ -32,6 +34,7 @@ const INITIAL_STATE: AppState = {
 export default function App() {
   const [appState, setAppState] = useState<AppState>(INITIAL_STATE);
   const [token, setToken] = useState<string | null>(null);
+  const [signup, setSignup] = useState<{ account: { fullName: string; email: string; password: string; nationalId: string }; policies: Policy[] } | null>(null);
 
   const navigate = (screen: Screen, params: Record<string, string> = {}) => {
     setAppState(prev => ({
@@ -63,7 +66,20 @@ export default function App() {
     if (screen === 'signup') {
       return (
         <SignUpPage
-          onComplete={() => navigate('landing')}
+          onPoliciesVerified={(account, policies) => {
+            setSignup({ account, policies });
+            navigate('policy-verification');
+          }}
+          onGoSignIn={() => navigate('landing')}
+        />
+      );
+    }
+    if (screen === 'policy-verification' && signup) {
+      return (
+        <PolicyVerification
+          account={signup.account}
+          policies={signup.policies}
+          onComplete={() => setSignup(null)}
           onGoSignIn={() => navigate('landing')}
         />
       );

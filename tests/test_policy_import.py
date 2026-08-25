@@ -2,10 +2,11 @@ from uuid import uuid4
 import unittest
 
 from fastapi import HTTPException
+from pydantic import ValidationError
 
-from app.main import get_my_policies, get_policy, register
+from app.main import get_my_policies, get_policy, register, verify_policies
 from app.policy_import import DEFAULT_POLICY_SOURCE, import_policies, load_source_policies
-from app.schemas import RegisterRequest
+from app.schemas import PolicyVerificationRequest, RegisterRequest
 
 
 class Result:
@@ -71,6 +72,8 @@ class AssociationDatabase:
 
     def execute(self, statement, params=None):
         sql = str(statement)
+        if "FROM policies p" in sql:
+            return Result(self.policies if params["national_id"] == "29001011200345" else [])
         if "SELECT user_id FROM users WHERE email" in sql:
             return Result(None)
         if "SELECT user_id, email, status FROM users" in sql:
@@ -118,6 +121,34 @@ class PolicyImportTests(unittest.TestCase):
         with self.assertRaises(HTTPException) as error:
             get_policy("P-1001", {"user_id": other_id}, db)
         self.assertEqual(error.exception.status_code, 403)
+
+    def test_verifies_only_policies_matching_the_provided_national_id(self):
+        owner_id, other_id = uuid4(), uuid4()
+        db = AssociationDatabase(owner_id, other_id)
+
+        policies = verify_policies(PolicyVerificationRequest(national_id="29001011200345"), db)
+        no_policies = verify_policies(PolicyVerificationRequest(national_id="29999999999999"), db)
+
+        self.assertEqual([policy["policy_id"] for policy in policies], ["P-1001"])
+        self.assertEqual(no_policies, [])
+        with self.assertRaises(ValidationError):
+            PolicyVerificationRequest(national_id="")
+
+    def test_registration_rejects_a_national_id_without_imported_policies(self):
+        db = AssociationDatabase(uuid4(), uuid4())
+
+        with self.assertRaises(HTTPException) as error:
+            register(
+                RegisterRequest(
+                    full_name="No Policy",
+                    email="no-policy@example.com",
+                    password="secure-password",
+                    national_id="29999999999999",
+                ),
+                db,
+            )
+
+        self.assertEqual(error.exception.status_code, 422)
 
 
 if __name__ == "__main__":

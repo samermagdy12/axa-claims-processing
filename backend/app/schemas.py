@@ -12,6 +12,10 @@ class RegisterRequest(BaseModel):
     national_id: str = Field(min_length=1, max_length=50)
 
 
+class PolicyVerificationRequest(BaseModel):
+    national_id: str = Field(min_length=1, max_length=50)
+
+
 class LoginRequest(BaseModel):
     email: EmailStr
     password: str = Field(min_length=1)

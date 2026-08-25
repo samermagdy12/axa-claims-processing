@@ -1,13 +1,14 @@
 import { useState } from 'react';
 import { Button, Input, Alert, AxaLogo } from '../../components/UI';
-import { registerCustomer } from '../../api';
+import { verifyPolicies } from '../../api';
+import type { Policy } from '../../types';
 
 interface SignUpPageProps {
-  onComplete: () => void;
+  onPoliciesVerified: (account: { fullName: string; email: string; password: string; nationalId: string }, policies: Policy[]) => void;
   onGoSignIn: () => void;
 }
 
-export default function SignUpPage({ onComplete, onGoSignIn }: SignUpPageProps) {
+export default function SignUpPage({ onPoliciesVerified, onGoSignIn }: SignUpPageProps) {
   const [form, setForm] = useState({ fullName: '', email: '', password: '', confirmPassword: '', nationalId: '' });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitError, setSubmitError] = useState('');
@@ -32,8 +33,18 @@ export default function SignUpPage({ onComplete, onGoSignIn }: SignUpPageProps) 
     if (Object.keys(errs).length > 0) { setErrors(errs); return; }
     setSubmitError('');
     setIsSubmitting(true);
-    try { await registerCustomer(form); onComplete(); }
-    catch (error) { setSubmitError(error instanceof Error ? error.message : 'Unable to create your account.'); }
+    try {
+      const policies = await verifyPolicies(form.nationalId);
+      if (policies.length === 0) {
+        setSubmitError('No policies were found for this National ID. Please check your details or contact AXA Egypt.');
+        return;
+      }
+      onPoliciesVerified(
+        { fullName: form.fullName.trim(), email: form.email, password: form.password, nationalId: form.nationalId },
+        policies,
+      );
+    }
+    catch (error) { setSubmitError(error instanceof Error ? error.message : 'Unable to verify your policies.'); }
     finally { setIsSubmitting(false); }
   };
 
@@ -111,12 +122,12 @@ export default function SignUpPage({ onComplete, onGoSignIn }: SignUpPageProps) 
                 error={errors.confirmPassword}
               />
 
-              <Alert variant="info">After registration, sign in to view policies already assigned to your account.</Alert>
+              <Alert variant="info">Your National ID will be used to verify policies already assigned to you.</Alert>
 
               {submitError && <Alert variant="error">{submitError}</Alert>}
 
               <Button type="submit" className="w-full" size="lg" disabled={isSubmitting}>
-                {isSubmitting ? 'Creating account…' : 'Create Account'}
+                {isSubmitting ? 'Verifying policies…' : 'Continue'}
               </Button>
             </form>
 

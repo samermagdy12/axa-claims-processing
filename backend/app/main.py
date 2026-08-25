@@ -7,7 +7,7 @@ from app.auth import create_access_token, get_current_user, hash_password, verif
 from app.claim_requirements import get_required_documents
 from app.config import settings
 from app.database import get_db
-from app.schemas import AuthResponse, ClaimCreateRequest, ClaimCreateResponse, LoginRequest, PolicyResponse, RegisterRequest
+from app.schemas import AuthResponse, ClaimCreateRequest, ClaimCreateResponse, LoginRequest, PolicyResponse, PolicyVerificationRequest, RegisterRequest
 
 
 app = FastAPI(
@@ -40,6 +40,27 @@ def serialize_policy(policy: dict) -> dict:
     return {**policy, "riders": policy["riders"] or []}
 
 
+def get_policies_for_national_id(national_id: str, db: Session) -> list[dict]:
+    policies = db.execute(
+        text("""
+            SELECT p.policy_id, p.policy_number, p.product_line, p.status,
+                   p.start_date, p.end_date, p.annual_limit, p.remaining_limit,
+                   p.deductible, p.riders
+            FROM policies p
+            JOIN users u ON u.user_id = p.user_id
+            WHERE u.national_id = :national_id
+            ORDER BY p.start_date DESC, p.policy_number
+        """),
+        {"national_id": national_id},
+    ).mappings().all()
+    return [serialize_policy(dict(policy)) for policy in policies]
+
+
+@app.post("/auth/verify-policies", response_model=list[PolicyResponse])
+def verify_policies(payload: PolicyVerificationRequest, db: Session = Depends(get_db)):
+    return get_policies_for_national_id(payload.national_id, db)
+
+
 @app.post("/auth/register", response_model=AuthResponse, status_code=status.HTTP_201_CREATED)
 def register(payload: RegisterRequest, db: Session = Depends(get_db)):
     email = str(payload.email).lower()
@@ -49,6 +70,8 @@ def register(payload: RegisterRequest, db: Session = Depends(get_db)):
     existing_national_id = db.execute(text("SELECT user_id, email, status FROM users WHERE national_id = :national_id"), {"national_id": payload.national_id}).mappings().first()
     if existing_national_id and (existing_national_id["status"] != "inactive" or not existing_national_id["email"].endswith("@policy-import.local")):
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Email or national ID is already registered")
+    if not get_policies_for_national_id(payload.national_id, db):
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="No policies were found for this National ID")
     customer_role = db.execute(text("SELECT role_id FROM roles WHERE role_name = 'Customer'")).mappings().first()
     if customer_role is None:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Customer role is not configured")

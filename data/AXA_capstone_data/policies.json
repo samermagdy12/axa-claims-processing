@@ -1,0 +1,2103 @@
+[
+  {
+    "policy_id": "P-1001",
+    "holder_name": "Mona Adel",
+    "national_id": "29001011200345",
+    "line": "health",
+    "status": "active",
+    "start_date": "2025-01-10",
+    "end_date": "2026-01-10",
+    "annual_limit": 200000,
+    "remaining_limit": 150000,
+    "deductible": 250,
+    "riders": []
+  },
+  {
+    "policy_id": "P-1002",
+    "holder_name": "Youssef Ibrahim",
+    "national_id": "28806152100781",
+    "line": "health",
+    "status": "active",
+    "start_date": "2024-06-01",
+    "end_date": "2026-06-01",
+    "annual_limit": 100000,
+    "remaining_limit": 8000,
+    "deductible": 250,
+    "riders": [
+      "outpatient"
+    ]
+  },
+  {
+    "policy_id": "P-1003",
+    "holder_name": "Salma Farouk",
+    "national_id": "29305231200990",
+    "line": "health",
+    "status": "active",
+    "start_date": "2025-11-01",
+    "end_date": "2026-11-01",
+    "annual_limit": 250000,
+    "remaining_limit": 250000,
+    "deductible": 250,
+    "riders": [
+      "maternity"
+    ]
+  },
+  {
+    "policy_id": "P-1004",
+    "holder_name": "Karim Nabil",
+    "national_id": "29112091201233",
+    "line": "health",
+    "status": "active",
+    "start_date": "2026-06-20",
+    "end_date": "2027-06-20",
+    "annual_limit": 80000,
+    "remaining_limit": 50000,
+    "deductible": 250,
+    "riders": []
+  },
+  {
+    "policy_id": "P-2001",
+    "holder_name": "Ahmed Saad",
+    "national_id": "28703121200456",
+    "line": "motor",
+    "status": "active",
+    "start_date": "2025-03-01",
+    "end_date": "2026-03-01",
+    "annual_limit": 150000,
+    "remaining_limit": 100000,
+    "deductible": 1000,
+    "cover": "comprehensive",
+    "riders": []
+  },
+  {
+    "policy_id": "P-2002",
+    "holder_name": "Hana Mostafa",
+    "national_id": "29008182100672",
+    "line": "motor",
+    "status": "active",
+    "start_date": "2025-05-01",
+    "end_date": "2026-05-01",
+    "annual_limit": 50000,
+    "remaining_limit": 50000,
+    "deductible": 0,
+    "cover": "third_party_only",
+    "riders": []
+  },
+  {
+    "policy_id": "P-2003",
+    "holder_name": "Tarek Fahmy",
+    "national_id": "28601302100513",
+    "line": "motor",
+    "status": "active",
+    "start_date": "2026-06-28",
+    "end_date": "2027-06-28",
+    "annual_limit": 120000,
+    "remaining_limit": 80000,
+    "deductible": 1000,
+    "cover": "comprehensive",
+    "riders": []
+  },
+  {
+    "policy_id": "P-2004",
+    "holder_name": "Nour El-Din",
+    "national_id": "28904271200198",
+    "line": "motor",
+    "status": "lapsed",
+    "start_date": "2024-02-01",
+    "end_date": "2025-02-01",
+    "annual_limit": 100000,
+    "remaining_limit": 100000,
+    "deductible": 1000,
+    "cover": "comprehensive",
+    "riders": []
+  },
+  {
+    "policy_id": "P-3001",
+    "holder_name": "Laila Hassan",
+    "national_id": "29202142101044",
+    "line": "property",
+    "status": "active",
+    "start_date": "2024-09-01",
+    "end_date": "2026-09-01",
+    "annual_limit": 300000,
+    "remaining_limit": 120000,
+    "deductible": 500,
+    "riders": []
+  },
+  {
+    "policy_id": "P-3002",
+    "holder_name": "Omar Zaki",
+    "national_id": "28510081200377",
+    "line": "property",
+    "status": "active",
+    "start_date": "2025-01-15",
+    "end_date": "2026-01-15",
+    "annual_limit": 300000,
+    "remaining_limit": 120000,
+    "deductible": 500,
+    "riders": [
+      "flood"
+    ]
+  },
+  {
+    "policy_id": "P-3003",
+    "holder_name": "Dina Sabry",
+    "national_id": "29401192101288",
+    "line": "property",
+    "status": "active",
+    "start_date": "2025-02-01",
+    "end_date": "2026-02-01",
+    "annual_limit": 100000,
+    "remaining_limit": 4000,
+    "deductible": 500,
+    "riders": []
+  },
+  {
+    "policy_id": "P-4001",
+    "holder_name": "Sherif Gaber",
+    "national_id": "28807232100819",
+    "line": "travel",
+    "status": "active",
+    "start_date": "2026-06-10",
+    "end_date": "2026-07-25",
+    "annual_limit": 50000,
+    "remaining_limit": 50000,
+    "deductible": 0,
+    "riders": []
+  },
+  {
+    "policy_id": "P-4002",
+    "holder_name": "Rania Kamal",
+    "national_id": "29009302101155",
+    "line": "travel",
+    "status": "active",
+    "start_date": "2026-06-15",
+    "end_date": "2026-08-15",
+    "annual_limit": 60000,
+    "remaining_limit": 60000,
+    "deductible": 0,
+    "riders": []
+  },
+  {
+    "policy_id": "P-5001",
+    "holder_name": "Mahmoud Refaat",
+    "national_id": "29103051200266",
+    "line": "health",
+    "status": "pending",
+    "start_date": "2026-07-15",
+    "end_date": "2027-07-15",
+    "annual_limit": 100000,
+    "remaining_limit": 100000,
+    "deductible": 250,
+    "riders": []
+  },
+  {
+    "policy_id": "P-5002",
+    "holder_name": "Aya Sami",
+    "national_id": "29207112101433",
+    "line": "motor",
+    "status": "cancelled",
+    "start_date": "2025-04-01",
+    "end_date": "2026-04-01",
+    "annual_limit": 90000,
+    "remaining_limit": 90000,
+    "deductible": 1000,
+    "cover": "comprehensive",
+    "riders": []
+  },
+  {
+    "policy_id": "P-11006",
+    "holder_name": "Farida Halim",
+    "national_id": "28651282538206",
+    "line": "health",
+    "status": "pending",
+    "start_date": "2024-11-24",
+    "end_date": "2027-01-01",
+    "annual_limit": 50000,
+    "remaining_limit": 50000,
+    "deductible": 0,
+    "riders": [
+      "maternity"
+    ]
+  },
+  {
+    "policy_id": "P-11007",
+    "holder_name": "Nada Wahba",
+    "national_id": "29055050052120",
+    "line": "health",
+    "status": "lapsed",
+    "start_date": "2024-09-07",
+    "end_date": "2027-01-01",
+    "annual_limit": 50000,
+    "remaining_limit": 50000,
+    "deductible": 1000,
+    "riders": []
+  },
+  {
+    "policy_id": "P-41008",
+    "holder_name": "Amira Sobhy",
+    "national_id": "28966854953850",
+    "line": "travel",
+    "status": "active",
+    "start_date": "2025-03-07",
+    "end_date": "2027-01-01",
+    "annual_limit": 150000,
+    "remaining_limit": 150000,
+    "deductible": 500,
+    "riders": []
+  },
+  {
+    "policy_id": "P-11009",
+    "holder_name": "Waleed Rizk",
+    "national_id": "28881597082643",
+    "line": "health",
+    "status": "lapsed",
+    "start_date": "2025-01-24",
+    "end_date": "2027-01-01",
+    "annual_limit": 250000,
+    "remaining_limit": 125000,
+    "deductible": 0,
+    "riders": []
+  },
+  {
+    "policy_id": "P-11010",
+    "holder_name": "Fady Rizk",
+    "national_id": "28712933106111",
+    "line": "health",
+    "status": "pending",
+    "start_date": "2024-01-22",
+    "end_date": "2027-01-01",
+    "annual_limit": 150000,
+    "remaining_limit": 2000,
+    "deductible": 500,
+    "riders": []
+  },
+  {
+    "policy_id": "P-21011",
+    "holder_name": "Sara Barakat",
+    "national_id": "29197732084371",
+    "line": "motor",
+    "status": "cancelled",
+    "start_date": "2025-03-12",
+    "end_date": "2027-01-01",
+    "annual_limit": 80000,
+    "remaining_limit": 5000,
+    "deductible": 250,
+    "riders": [
+      "commercial"
+    ],
+    "cover": "third_party_only"
+  },
+  {
+    "policy_id": "P-11012",
+    "holder_name": "Ashraf Halim",
+    "national_id": "29007507949295",
+    "line": "health",
+    "status": "active",
+    "start_date": "2025-11-23",
+    "end_date": "2027-01-01",
+    "annual_limit": 100000,
+    "remaining_limit": 100000,
+    "deductible": 250,
+    "riders": [
+      "maternity"
+    ]
+  },
+  {
+    "policy_id": "P-11013",
+    "holder_name": "Hossam Fawzy",
+    "national_id": "28793780765787",
+    "line": "health",
+    "status": "active",
+    "start_date": "2024-10-23",
+    "end_date": "2027-01-01",
+    "annual_limit": 120000,
+    "remaining_limit": 5000,
+    "deductible": 250,
+    "riders": [
+      "maternity"
+    ]
+  },
+  {
+    "policy_id": "P-41014",
+    "holder_name": "Mariam Barakat",
+    "national_id": "28771182647325",
+    "line": "travel",
+    "status": "pending",
+    "start_date": "2026-09-09",
+    "end_date": "2027-01-01",
+    "annual_limit": 300000,
+    "remaining_limit": 300000,
+    "deductible": 1000,
+    "riders": [
+      "adventure"
+    ]
+  },
+  {
+    "policy_id": "P-31015",
+    "holder_name": "Mariam Darwish",
+    "national_id": "28600903882207",
+    "line": "property",
+    "status": "cancelled",
+    "start_date": "2024-02-05",
+    "end_date": "2027-01-01",
+    "annual_limit": 120000,
+    "remaining_limit": 120000,
+    "deductible": 250,
+    "riders": [
+      "all_risks"
+    ]
+  },
+  {
+    "policy_id": "P-11016",
+    "holder_name": "Sara Awad",
+    "national_id": "28777150435753",
+    "line": "health",
+    "status": "lapsed",
+    "start_date": "2024-11-24",
+    "end_date": "2027-01-01",
+    "annual_limit": 250000,
+    "remaining_limit": 0,
+    "deductible": 500,
+    "riders": [
+      "maternity"
+    ]
+  },
+  {
+    "policy_id": "P-11017",
+    "holder_name": "Bassem Sobhy",
+    "national_id": "28501948728483",
+    "line": "health",
+    "status": "pending",
+    "start_date": "2026-05-17",
+    "end_date": "2027-01-01",
+    "annual_limit": 150000,
+    "remaining_limit": 150000,
+    "deductible": 250,
+    "riders": [
+      "outpatient"
+    ]
+  },
+  {
+    "policy_id": "P-31018",
+    "holder_name": "Mariam Rizk",
+    "national_id": "28679368618081",
+    "line": "property",
+    "status": "lapsed",
+    "start_date": "2026-01-20",
+    "end_date": "2027-01-01",
+    "annual_limit": 120000,
+    "remaining_limit": 5000,
+    "deductible": 1000,
+    "riders": []
+  },
+  {
+    "policy_id": "P-11019",
+    "holder_name": "Khaled Halim",
+    "national_id": "28762241791770",
+    "line": "health",
+    "status": "lapsed",
+    "start_date": "2024-02-24",
+    "end_date": "2027-01-01",
+    "annual_limit": 200000,
+    "remaining_limit": 100000,
+    "deductible": 0,
+    "riders": [
+      "outpatient"
+    ]
+  },
+  {
+    "policy_id": "P-21020",
+    "holder_name": "Ashraf Sobhy",
+    "national_id": "29080958994499",
+    "line": "motor",
+    "status": "cancelled",
+    "start_date": "2026-07-07",
+    "end_date": "2027-01-01",
+    "annual_limit": 300000,
+    "remaining_limit": 300000,
+    "deductible": 250,
+    "riders": [
+      "commercial"
+    ],
+    "cover": "comprehensive"
+  },
+  {
+    "policy_id": "P-31021",
+    "holder_name": "Reem Awad",
+    "national_id": "28771102648727",
+    "line": "property",
+    "status": "active",
+    "start_date": "2024-06-01",
+    "end_date": "2027-01-01",
+    "annual_limit": 300000,
+    "remaining_limit": 300000,
+    "deductible": 250,
+    "riders": [
+      "flood"
+    ]
+  },
+  {
+    "policy_id": "P-11022",
+    "holder_name": "Hossam Halim",
+    "national_id": "29492426927558",
+    "line": "health",
+    "status": "active",
+    "start_date": "2025-02-17",
+    "end_date": "2027-01-01",
+    "annual_limit": 80000,
+    "remaining_limit": 2000,
+    "deductible": 500,
+    "riders": [
+      "maternity"
+    ]
+  },
+  {
+    "policy_id": "P-21023",
+    "holder_name": "Malak Labib",
+    "national_id": "29360037124392",
+    "line": "motor",
+    "status": "active",
+    "start_date": "2025-04-04",
+    "end_date": "2027-01-01",
+    "annual_limit": 100000,
+    "remaining_limit": 0,
+    "deductible": 1000,
+    "riders": [],
+    "cover": "comprehensive"
+  },
+  {
+    "policy_id": "P-41024",
+    "holder_name": "Hossam Ghali",
+    "national_id": "28942641960943",
+    "line": "travel",
+    "status": "pending",
+    "start_date": "2025-02-08",
+    "end_date": "2027-01-01",
+    "annual_limit": 300000,
+    "remaining_limit": 2000,
+    "deductible": 250,
+    "riders": [
+      "adventure"
+    ]
+  },
+  {
+    "policy_id": "P-21025",
+    "holder_name": "Sameh Barakat",
+    "national_id": "28772569912085",
+    "line": "motor",
+    "status": "cancelled",
+    "start_date": "2024-08-26",
+    "end_date": "2027-01-01",
+    "annual_limit": 250000,
+    "remaining_limit": 250000,
+    "deductible": 0,
+    "riders": [],
+    "cover": "third_party_only"
+  },
+  {
+    "policy_id": "P-11026",
+    "holder_name": "Ramy Sobhy",
+    "national_id": "29034321479802",
+    "line": "health",
+    "status": "active",
+    "start_date": "2024-07-02",
+    "end_date": "2027-01-01",
+    "annual_limit": 80000,
+    "remaining_limit": 2000,
+    "deductible": 1000,
+    "riders": []
+  },
+  {
+    "policy_id": "P-41027",
+    "holder_name": "Nourhan Metwally",
+    "national_id": "29266320981994",
+    "line": "travel",
+    "status": "pending",
+    "start_date": "2026-11-23",
+    "end_date": "2027-01-01",
+    "annual_limit": 150000,
+    "remaining_limit": 75000,
+    "deductible": 250,
+    "riders": []
+  },
+  {
+    "policy_id": "P-31028",
+    "holder_name": "Hossam Attia",
+    "national_id": "29320600564299",
+    "line": "property",
+    "status": "active",
+    "start_date": "2024-01-19",
+    "end_date": "2027-01-01",
+    "annual_limit": 120000,
+    "remaining_limit": 60000,
+    "deductible": 250,
+    "riders": []
+  },
+  {
+    "policy_id": "P-11029",
+    "holder_name": "Nada Mansour",
+    "national_id": "29447792820940",
+    "line": "health",
+    "status": "active",
+    "start_date": "2025-02-19",
+    "end_date": "2027-01-01",
+    "annual_limit": 100000,
+    "remaining_limit": 2000,
+    "deductible": 0,
+    "riders": [
+      "outpatient"
+    ]
+  },
+  {
+    "policy_id": "P-41030",
+    "holder_name": "Farida Wahba",
+    "national_id": "29288855466331",
+    "line": "travel",
+    "status": "active",
+    "start_date": "2024-05-13",
+    "end_date": "2027-01-01",
+    "annual_limit": 200000,
+    "remaining_limit": 2000,
+    "deductible": 500,
+    "riders": []
+  },
+  {
+    "policy_id": "P-31031",
+    "holder_name": "Amira Awad",
+    "national_id": "28577738827541",
+    "line": "property",
+    "status": "lapsed",
+    "start_date": "2024-09-09",
+    "end_date": "2027-01-01",
+    "annual_limit": 80000,
+    "remaining_limit": 2000,
+    "deductible": 500,
+    "riders": []
+  },
+  {
+    "policy_id": "P-21032",
+    "holder_name": "Khaled Sobhy",
+    "national_id": "29416710022432",
+    "line": "motor",
+    "status": "lapsed",
+    "start_date": "2026-05-20",
+    "end_date": "2027-01-01",
+    "annual_limit": 200000,
+    "remaining_limit": 200000,
+    "deductible": 0,
+    "riders": [
+      "commercial"
+    ],
+    "cover": "third_party_only"
+  },
+  {
+    "policy_id": "P-11033",
+    "holder_name": "Farida Ghali",
+    "national_id": "28619785403991",
+    "line": "health",
+    "status": "pending",
+    "start_date": "2026-03-09",
+    "end_date": "2027-01-01",
+    "annual_limit": 100000,
+    "remaining_limit": 5000,
+    "deductible": 250,
+    "riders": [
+      "maternity"
+    ]
+  },
+  {
+    "policy_id": "P-21034",
+    "holder_name": "Reem Labib",
+    "national_id": "29493216002929",
+    "line": "motor",
+    "status": "cancelled",
+    "start_date": "2024-02-21",
+    "end_date": "2027-01-01",
+    "annual_limit": 150000,
+    "remaining_limit": 75000,
+    "deductible": 500,
+    "riders": [],
+    "cover": "comprehensive"
+  },
+  {
+    "policy_id": "P-31035",
+    "holder_name": "Farida Sobhy",
+    "national_id": "28988514866975",
+    "line": "property",
+    "status": "lapsed",
+    "start_date": "2026-07-18",
+    "end_date": "2027-01-01",
+    "annual_limit": 100000,
+    "remaining_limit": 0,
+    "deductible": 0,
+    "riders": []
+  },
+  {
+    "policy_id": "P-21036",
+    "holder_name": "Tamer Attia",
+    "national_id": "28973082460535",
+    "line": "motor",
+    "status": "active",
+    "start_date": "2024-05-12",
+    "end_date": "2027-01-01",
+    "annual_limit": 50000,
+    "remaining_limit": 50000,
+    "deductible": 0,
+    "riders": [],
+    "cover": "comprehensive"
+  },
+  {
+    "policy_id": "P-21037",
+    "holder_name": "Tamer Attia",
+    "national_id": "29461575036636",
+    "line": "motor",
+    "status": "active",
+    "start_date": "2026-12-05",
+    "end_date": "2027-01-01",
+    "annual_limit": 80000,
+    "remaining_limit": 2000,
+    "deductible": 250,
+    "riders": [],
+    "cover": "comprehensive"
+  },
+  {
+    "policy_id": "P-11038",
+    "holder_name": "Heba Naguib",
+    "national_id": "29237884981282",
+    "line": "health",
+    "status": "cancelled",
+    "start_date": "2026-04-09",
+    "end_date": "2027-01-01",
+    "annual_limit": 100000,
+    "remaining_limit": 2000,
+    "deductible": 0,
+    "riders": []
+  },
+  {
+    "policy_id": "P-11039",
+    "holder_name": "Ramy Wahba",
+    "national_id": "28884229076692",
+    "line": "health",
+    "status": "active",
+    "start_date": "2024-04-01",
+    "end_date": "2027-01-01",
+    "annual_limit": 300000,
+    "remaining_limit": 300000,
+    "deductible": 250,
+    "riders": []
+  },
+  {
+    "policy_id": "P-31040",
+    "holder_name": "Nada Barakat",
+    "national_id": "29205882797681",
+    "line": "property",
+    "status": "lapsed",
+    "start_date": "2025-11-27",
+    "end_date": "2027-01-01",
+    "annual_limit": 150000,
+    "remaining_limit": 150000,
+    "deductible": 500,
+    "riders": []
+  },
+  {
+    "policy_id": "P-11041",
+    "holder_name": "Sameh Barakat",
+    "national_id": "28616128430402",
+    "line": "health",
+    "status": "lapsed",
+    "start_date": "2025-06-24",
+    "end_date": "2027-01-01",
+    "annual_limit": 150000,
+    "remaining_limit": 150000,
+    "deductible": 500,
+    "riders": []
+  },
+  {
+    "policy_id": "P-11042",
+    "holder_name": "Malak Wahba",
+    "national_id": "28548338665100",
+    "line": "health",
+    "status": "pending",
+    "start_date": "2025-01-17",
+    "end_date": "2027-01-01",
+    "annual_limit": 250000,
+    "remaining_limit": 250000,
+    "deductible": 250,
+    "riders": []
+  },
+  {
+    "policy_id": "P-41043",
+    "holder_name": "Heba Fawzy",
+    "national_id": "29434857130726",
+    "line": "travel",
+    "status": "active",
+    "start_date": "2026-05-17",
+    "end_date": "2027-01-01",
+    "annual_limit": 80000,
+    "remaining_limit": 5000,
+    "deductible": 1000,
+    "riders": []
+  },
+  {
+    "policy_id": "P-41044",
+    "holder_name": "Ashraf Rashad",
+    "national_id": "28960385447606",
+    "line": "travel",
+    "status": "pending",
+    "start_date": "2025-11-24",
+    "end_date": "2027-01-01",
+    "annual_limit": 150000,
+    "remaining_limit": 2000,
+    "deductible": 500,
+    "riders": []
+  },
+  {
+    "policy_id": "P-11045",
+    "holder_name": "Khaled Wahba",
+    "national_id": "29365134782024",
+    "line": "health",
+    "status": "lapsed",
+    "start_date": "2026-11-11",
+    "end_date": "2027-01-01",
+    "annual_limit": 150000,
+    "remaining_limit": 75000,
+    "deductible": 1000,
+    "riders": []
+  },
+  {
+    "policy_id": "P-21046",
+    "holder_name": "Sameh Mansour",
+    "national_id": "29063859569104",
+    "line": "motor",
+    "status": "pending",
+    "start_date": "2026-10-11",
+    "end_date": "2027-01-01",
+    "annual_limit": 300000,
+    "remaining_limit": 0,
+    "deductible": 250,
+    "riders": [
+      "commercial"
+    ],
+    "cover": "comprehensive"
+  },
+  {
+    "policy_id": "P-21047",
+    "holder_name": "Amira Abdel-Rahman",
+    "national_id": "29172055593219",
+    "line": "motor",
+    "status": "cancelled",
+    "start_date": "2024-08-14",
+    "end_date": "2027-01-01",
+    "annual_limit": 100000,
+    "remaining_limit": 100000,
+    "deductible": 250,
+    "riders": [
+      "commercial"
+    ],
+    "cover": "comprehensive"
+  },
+  {
+    "policy_id": "P-41048",
+    "holder_name": "Mariam Shawky",
+    "national_id": "29328467665569",
+    "line": "travel",
+    "status": "cancelled",
+    "start_date": "2024-07-08",
+    "end_date": "2027-01-01",
+    "annual_limit": 120000,
+    "remaining_limit": 2000,
+    "deductible": 1000,
+    "riders": []
+  },
+  {
+    "policy_id": "P-21049",
+    "holder_name": "Nourhan Rashad",
+    "national_id": "29010248199023",
+    "line": "motor",
+    "status": "pending",
+    "start_date": "2026-09-20",
+    "end_date": "2027-01-01",
+    "annual_limit": 80000,
+    "remaining_limit": 5000,
+    "deductible": 1000,
+    "riders": [
+      "commercial"
+    ],
+    "cover": "third_party_only"
+  },
+  {
+    "policy_id": "P-41050",
+    "holder_name": "Islam Awad",
+    "national_id": "29325746940063",
+    "line": "travel",
+    "status": "active",
+    "start_date": "2026-05-25",
+    "end_date": "2027-01-01",
+    "annual_limit": 100000,
+    "remaining_limit": 100000,
+    "deductible": 1000,
+    "riders": [
+      "adventure"
+    ]
+  },
+  {
+    "policy_id": "P-31051",
+    "holder_name": "Nada Metwally",
+    "national_id": "28797359885684",
+    "line": "property",
+    "status": "active",
+    "start_date": "2025-09-03",
+    "end_date": "2027-01-01",
+    "annual_limit": 300000,
+    "remaining_limit": 2000,
+    "deductible": 250,
+    "riders": []
+  },
+  {
+    "policy_id": "P-41052",
+    "holder_name": "Yara Mansour",
+    "national_id": "28948458442836",
+    "line": "travel",
+    "status": "active",
+    "start_date": "2026-08-14",
+    "end_date": "2027-01-01",
+    "annual_limit": 100000,
+    "remaining_limit": 0,
+    "deductible": 250,
+    "riders": []
+  },
+  {
+    "policy_id": "P-41053",
+    "holder_name": "Malak Selim",
+    "national_id": "28506343579654",
+    "line": "travel",
+    "status": "active",
+    "start_date": "2025-07-28",
+    "end_date": "2027-01-01",
+    "annual_limit": 50000,
+    "remaining_limit": 50000,
+    "deductible": 1000,
+    "riders": [
+      "adventure"
+    ]
+  },
+  {
+    "policy_id": "P-41054",
+    "holder_name": "Farida Naguib",
+    "national_id": "28532150587583",
+    "line": "travel",
+    "status": "active",
+    "start_date": "2025-11-22",
+    "end_date": "2027-01-01",
+    "annual_limit": 120000,
+    "remaining_limit": 120000,
+    "deductible": 1000,
+    "riders": [
+      "adventure"
+    ]
+  },
+  {
+    "policy_id": "P-41055",
+    "holder_name": "Fady Attia",
+    "national_id": "29496548232697",
+    "line": "travel",
+    "status": "active",
+    "start_date": "2026-10-22",
+    "end_date": "2027-01-01",
+    "annual_limit": 100000,
+    "remaining_limit": 0,
+    "deductible": 0,
+    "riders": [
+      "adventure"
+    ]
+  },
+  {
+    "policy_id": "P-21056",
+    "holder_name": "Sameh Abdel-Rahman",
+    "national_id": "28917729190564",
+    "line": "motor",
+    "status": "active",
+    "start_date": "2024-08-11",
+    "end_date": "2027-01-01",
+    "annual_limit": 300000,
+    "remaining_limit": 5000,
+    "deductible": 1000,
+    "riders": [],
+    "cover": "comprehensive"
+  },
+  {
+    "policy_id": "P-31057",
+    "holder_name": "Islam Shawky",
+    "national_id": "29095922521544",
+    "line": "property",
+    "status": "active",
+    "start_date": "2025-04-21",
+    "end_date": "2027-01-01",
+    "annual_limit": 80000,
+    "remaining_limit": 0,
+    "deductible": 0,
+    "riders": []
+  },
+  {
+    "policy_id": "P-21058",
+    "holder_name": "Amira Rashad",
+    "national_id": "28638463496194",
+    "line": "motor",
+    "status": "active",
+    "start_date": "2026-02-19",
+    "end_date": "2027-01-01",
+    "annual_limit": 120000,
+    "remaining_limit": 2000,
+    "deductible": 1000,
+    "riders": [
+      "commercial"
+    ],
+    "cover": "comprehensive"
+  },
+  {
+    "policy_id": "P-21059",
+    "holder_name": "Sameh Metwally",
+    "national_id": "29136119440405",
+    "line": "motor",
+    "status": "active",
+    "start_date": "2025-10-22",
+    "end_date": "2027-01-01",
+    "annual_limit": 80000,
+    "remaining_limit": 40000,
+    "deductible": 1000,
+    "riders": [
+      "commercial"
+    ],
+    "cover": "comprehensive"
+  },
+  {
+    "policy_id": "P-21060",
+    "holder_name": "Khaled Ghali",
+    "national_id": "29361424120992",
+    "line": "motor",
+    "status": "active",
+    "start_date": "2025-09-14",
+    "end_date": "2027-01-01",
+    "annual_limit": 80000,
+    "remaining_limit": 80000,
+    "deductible": 500,
+    "riders": [],
+    "cover": "third_party_only"
+  },
+  {
+    "policy_id": "P-31061",
+    "holder_name": "Bassem Labib",
+    "national_id": "28972899688547",
+    "line": "property",
+    "status": "active",
+    "start_date": "2026-08-23",
+    "end_date": "2027-01-01",
+    "annual_limit": 50000,
+    "remaining_limit": 2000,
+    "deductible": 1000,
+    "riders": []
+  },
+  {
+    "policy_id": "P-31062",
+    "holder_name": "Nourhan Naguib",
+    "national_id": "29306705387446",
+    "line": "property",
+    "status": "lapsed",
+    "start_date": "2025-06-28",
+    "end_date": "2027-01-01",
+    "annual_limit": 300000,
+    "remaining_limit": 2000,
+    "deductible": 0,
+    "riders": []
+  },
+  {
+    "policy_id": "P-41063",
+    "holder_name": "Nourhan Selim",
+    "national_id": "28531509583569",
+    "line": "travel",
+    "status": "active",
+    "start_date": "2025-03-16",
+    "end_date": "2027-01-01",
+    "annual_limit": 120000,
+    "remaining_limit": 2000,
+    "deductible": 500,
+    "riders": []
+  },
+  {
+    "policy_id": "P-31064",
+    "holder_name": "Fady Barakat",
+    "national_id": "28510977038883",
+    "line": "property",
+    "status": "lapsed",
+    "start_date": "2024-02-08",
+    "end_date": "2027-01-01",
+    "annual_limit": 150000,
+    "remaining_limit": 150000,
+    "deductible": 1000,
+    "riders": []
+  },
+  {
+    "policy_id": "P-21065",
+    "holder_name": "Islam Awad",
+    "national_id": "28520585489939",
+    "line": "motor",
+    "status": "active",
+    "start_date": "2025-04-13",
+    "end_date": "2027-01-01",
+    "annual_limit": 300000,
+    "remaining_limit": 300000,
+    "deductible": 250,
+    "riders": [],
+    "cover": "third_party_only"
+  },
+  {
+    "policy_id": "P-31066",
+    "holder_name": "Ashraf Darwish",
+    "national_id": "28965332894722",
+    "line": "property",
+    "status": "pending",
+    "start_date": "2026-06-12",
+    "end_date": "2027-01-01",
+    "annual_limit": 300000,
+    "remaining_limit": 300000,
+    "deductible": 1000,
+    "riders": []
+  },
+  {
+    "policy_id": "P-31067",
+    "holder_name": "Ramy Ghali",
+    "national_id": "28713551290143",
+    "line": "property",
+    "status": "active",
+    "start_date": "2024-12-18",
+    "end_date": "2027-01-01",
+    "annual_limit": 150000,
+    "remaining_limit": 150000,
+    "deductible": 250,
+    "riders": []
+  },
+  {
+    "policy_id": "P-21068",
+    "holder_name": "Farida Darwish",
+    "national_id": "28811800842026",
+    "line": "motor",
+    "status": "active",
+    "start_date": "2024-05-08",
+    "end_date": "2027-01-01",
+    "annual_limit": 300000,
+    "remaining_limit": 5000,
+    "deductible": 250,
+    "riders": [],
+    "cover": "comprehensive"
+  },
+  {
+    "policy_id": "P-21069",
+    "holder_name": "Hossam Abdel-Rahman",
+    "national_id": "28820204238564",
+    "line": "motor",
+    "status": "pending",
+    "start_date": "2024-11-28",
+    "end_date": "2027-01-01",
+    "annual_limit": 150000,
+    "remaining_limit": 150000,
+    "deductible": 1000,
+    "riders": [],
+    "cover": "comprehensive"
+  },
+  {
+    "policy_id": "P-31070",
+    "holder_name": "Islam Awad",
+    "national_id": "28703326783773",
+    "line": "property",
+    "status": "active",
+    "start_date": "2025-08-04",
+    "end_date": "2027-01-01",
+    "annual_limit": 300000,
+    "remaining_limit": 300000,
+    "deductible": 0,
+    "riders": []
+  },
+  {
+    "policy_id": "P-41071",
+    "holder_name": "Malak Abdel-Rahman",
+    "national_id": "28663860419795",
+    "line": "travel",
+    "status": "cancelled",
+    "start_date": "2026-05-03",
+    "end_date": "2027-01-01",
+    "annual_limit": 80000,
+    "remaining_limit": 2000,
+    "deductible": 0,
+    "riders": [
+      "adventure"
+    ]
+  },
+  {
+    "policy_id": "P-21072",
+    "holder_name": "Nourhan Awad",
+    "national_id": "29446169927083",
+    "line": "motor",
+    "status": "lapsed",
+    "start_date": "2025-05-19",
+    "end_date": "2027-01-01",
+    "annual_limit": 250000,
+    "remaining_limit": 250000,
+    "deductible": 0,
+    "riders": [
+      "commercial"
+    ],
+    "cover": "comprehensive"
+  },
+  {
+    "policy_id": "P-21073",
+    "holder_name": "Nada Sobhy",
+    "national_id": "28690008774121",
+    "line": "motor",
+    "status": "lapsed",
+    "start_date": "2024-03-01",
+    "end_date": "2027-01-01",
+    "annual_limit": 150000,
+    "remaining_limit": 75000,
+    "deductible": 1000,
+    "riders": [
+      "commercial"
+    ],
+    "cover": "comprehensive"
+  },
+  {
+    "policy_id": "P-11074",
+    "holder_name": "Khaled Metwally",
+    "national_id": "29447912113677",
+    "line": "health",
+    "status": "active",
+    "start_date": "2024-11-08",
+    "end_date": "2027-01-01",
+    "annual_limit": 120000,
+    "remaining_limit": 5000,
+    "deductible": 250,
+    "riders": []
+  },
+  {
+    "policy_id": "P-11075",
+    "holder_name": "Mariam Barakat",
+    "national_id": "28658169176459",
+    "line": "health",
+    "status": "active",
+    "start_date": "2024-03-26",
+    "end_date": "2027-01-01",
+    "annual_limit": 120000,
+    "remaining_limit": 5000,
+    "deductible": 500,
+    "riders": []
+  },
+  {
+    "policy_id": "P-11076",
+    "holder_name": "Khaled Selim",
+    "national_id": "28800401507048",
+    "line": "health",
+    "status": "lapsed",
+    "start_date": "2026-08-15",
+    "end_date": "2027-01-01",
+    "annual_limit": 300000,
+    "remaining_limit": 0,
+    "deductible": 0,
+    "riders": []
+  },
+  {
+    "policy_id": "P-31077",
+    "holder_name": "Amira Mansour",
+    "national_id": "29422019090774",
+    "line": "property",
+    "status": "cancelled",
+    "start_date": "2026-10-01",
+    "end_date": "2027-01-01",
+    "annual_limit": 150000,
+    "remaining_limit": 150000,
+    "deductible": 500,
+    "riders": [
+      "flood"
+    ]
+  },
+  {
+    "policy_id": "P-21078",
+    "holder_name": "Reem Awad",
+    "national_id": "28808877180672",
+    "line": "motor",
+    "status": "active",
+    "start_date": "2026-07-21",
+    "end_date": "2027-01-01",
+    "annual_limit": 300000,
+    "remaining_limit": 300000,
+    "deductible": 1000,
+    "riders": [],
+    "cover": "comprehensive"
+  },
+  {
+    "policy_id": "P-31079",
+    "holder_name": "Heba Fawzy",
+    "national_id": "28614547351220",
+    "line": "property",
+    "status": "cancelled",
+    "start_date": "2024-06-14",
+    "end_date": "2027-01-01",
+    "annual_limit": 250000,
+    "remaining_limit": 250000,
+    "deductible": 1000,
+    "riders": []
+  },
+  {
+    "policy_id": "P-41080",
+    "holder_name": "Nourhan Mansour",
+    "national_id": "28776228747842",
+    "line": "travel",
+    "status": "active",
+    "start_date": "2024-07-28",
+    "end_date": "2027-01-01",
+    "annual_limit": 50000,
+    "remaining_limit": 50000,
+    "deductible": 0,
+    "riders": [
+      "adventure"
+    ]
+  },
+  {
+    "policy_id": "P-41081",
+    "holder_name": "Yara Darwish",
+    "national_id": "29184453630589",
+    "line": "travel",
+    "status": "cancelled",
+    "start_date": "2025-11-15",
+    "end_date": "2027-01-01",
+    "annual_limit": 50000,
+    "remaining_limit": 50000,
+    "deductible": 0,
+    "riders": []
+  },
+  {
+    "policy_id": "P-31082",
+    "holder_name": "Khaled Awad",
+    "national_id": "29268287386081",
+    "line": "property",
+    "status": "active",
+    "start_date": "2024-01-21",
+    "end_date": "2027-01-01",
+    "annual_limit": 100000,
+    "remaining_limit": 100000,
+    "deductible": 250,
+    "riders": [
+      "flood"
+    ]
+  },
+  {
+    "policy_id": "P-31083",
+    "holder_name": "Ashraf Naguib",
+    "national_id": "28745213466367",
+    "line": "property",
+    "status": "cancelled",
+    "start_date": "2024-08-04",
+    "end_date": "2027-01-01",
+    "annual_limit": 50000,
+    "remaining_limit": 50000,
+    "deductible": 250,
+    "riders": []
+  },
+  {
+    "policy_id": "P-31084",
+    "holder_name": "Bassem Labib",
+    "national_id": "29019606194160",
+    "line": "property",
+    "status": "active",
+    "start_date": "2025-09-05",
+    "end_date": "2027-01-01",
+    "annual_limit": 150000,
+    "remaining_limit": 75000,
+    "deductible": 250,
+    "riders": [
+      "flood"
+    ]
+  },
+  {
+    "policy_id": "P-11085",
+    "holder_name": "Bassem Fawzy",
+    "national_id": "29367300992787",
+    "line": "health",
+    "status": "lapsed",
+    "start_date": "2025-01-10",
+    "end_date": "2027-01-01",
+    "annual_limit": 150000,
+    "remaining_limit": 150000,
+    "deductible": 500,
+    "riders": [
+      "dental"
+    ]
+  },
+  {
+    "policy_id": "P-41086",
+    "holder_name": "Nourhan Attia",
+    "national_id": "28880037352466",
+    "line": "travel",
+    "status": "active",
+    "start_date": "2026-09-13",
+    "end_date": "2027-01-01",
+    "annual_limit": 100000,
+    "remaining_limit": 50000,
+    "deductible": 500,
+    "riders": []
+  },
+  {
+    "policy_id": "P-21087",
+    "holder_name": "Ramy Naguib",
+    "national_id": "28848079814698",
+    "line": "motor",
+    "status": "pending",
+    "start_date": "2025-12-26",
+    "end_date": "2027-01-01",
+    "annual_limit": 250000,
+    "remaining_limit": 125000,
+    "deductible": 1000,
+    "riders": [
+      "commercial"
+    ],
+    "cover": "comprehensive"
+  },
+  {
+    "policy_id": "P-11088",
+    "holder_name": "Reem Fawzy",
+    "national_id": "28611109516823",
+    "line": "health",
+    "status": "cancelled",
+    "start_date": "2025-02-17",
+    "end_date": "2027-01-01",
+    "annual_limit": 100000,
+    "remaining_limit": 50000,
+    "deductible": 0,
+    "riders": [
+      "outpatient"
+    ]
+  },
+  {
+    "policy_id": "P-41089",
+    "holder_name": "Nada Labib",
+    "national_id": "28870505451632",
+    "line": "travel",
+    "status": "lapsed",
+    "start_date": "2026-07-21",
+    "end_date": "2027-01-01",
+    "annual_limit": 100000,
+    "remaining_limit": 0,
+    "deductible": 500,
+    "riders": [
+      "adventure"
+    ]
+  },
+  {
+    "policy_id": "P-31090",
+    "holder_name": "Ashraf Abdel-Rahman",
+    "national_id": "28575666412237",
+    "line": "property",
+    "status": "active",
+    "start_date": "2026-11-10",
+    "end_date": "2027-01-01",
+    "annual_limit": 300000,
+    "remaining_limit": 2000,
+    "deductible": 0,
+    "riders": []
+  },
+  {
+    "policy_id": "P-11091",
+    "holder_name": "Nourhan Sobhy",
+    "national_id": "28829398226794",
+    "line": "health",
+    "status": "active",
+    "start_date": "2024-06-26",
+    "end_date": "2027-01-01",
+    "annual_limit": 80000,
+    "remaining_limit": 0,
+    "deductible": 500,
+    "riders": []
+  },
+  {
+    "policy_id": "P-31092",
+    "holder_name": "Mariam Halim",
+    "national_id": "28953252908058",
+    "line": "property",
+    "status": "lapsed",
+    "start_date": "2026-03-06",
+    "end_date": "2027-01-01",
+    "annual_limit": 250000,
+    "remaining_limit": 2000,
+    "deductible": 0,
+    "riders": [
+      "all_risks"
+    ]
+  },
+  {
+    "policy_id": "P-21093",
+    "holder_name": "Malak Rashad",
+    "national_id": "29007803382689",
+    "line": "motor",
+    "status": "pending",
+    "start_date": "2025-08-09",
+    "end_date": "2027-01-01",
+    "annual_limit": 300000,
+    "remaining_limit": 300000,
+    "deductible": 0,
+    "riders": [],
+    "cover": "comprehensive"
+  },
+  {
+    "policy_id": "P-21094",
+    "holder_name": "Nourhan Rizk",
+    "national_id": "29148487026122",
+    "line": "motor",
+    "status": "active",
+    "start_date": "2026-07-23",
+    "end_date": "2027-01-01",
+    "annual_limit": 80000,
+    "remaining_limit": 5000,
+    "deductible": 1000,
+    "riders": [],
+    "cover": "comprehensive"
+  },
+  {
+    "policy_id": "P-41095",
+    "holder_name": "Waleed Halim",
+    "national_id": "29128703172393",
+    "line": "travel",
+    "status": "active",
+    "start_date": "2026-05-23",
+    "end_date": "2027-01-01",
+    "annual_limit": 300000,
+    "remaining_limit": 5000,
+    "deductible": 0,
+    "riders": [
+      "adventure"
+    ]
+  },
+  {
+    "policy_id": "P-31096",
+    "holder_name": "Malak Abdel-Rahman",
+    "national_id": "29169631000910",
+    "line": "property",
+    "status": "pending",
+    "start_date": "2025-05-25",
+    "end_date": "2027-01-01",
+    "annual_limit": 50000,
+    "remaining_limit": 50000,
+    "deductible": 250,
+    "riders": [
+      "all_risks"
+    ]
+  },
+  {
+    "policy_id": "P-21097",
+    "holder_name": "Fady Barakat",
+    "national_id": "29331839664317",
+    "line": "motor",
+    "status": "pending",
+    "start_date": "2026-11-27",
+    "end_date": "2027-01-01",
+    "annual_limit": 120000,
+    "remaining_limit": 2000,
+    "deductible": 0,
+    "riders": [
+      "commercial"
+    ],
+    "cover": "comprehensive"
+  },
+  {
+    "policy_id": "P-41098",
+    "holder_name": "Malak Rizk",
+    "national_id": "28644879382019",
+    "line": "travel",
+    "status": "active",
+    "start_date": "2025-06-24",
+    "end_date": "2027-01-01",
+    "annual_limit": 50000,
+    "remaining_limit": 25000,
+    "deductible": 250,
+    "riders": []
+  },
+  {
+    "policy_id": "P-21099",
+    "holder_name": "Reem Darwish",
+    "national_id": "28800276140106",
+    "line": "motor",
+    "status": "cancelled",
+    "start_date": "2024-05-27",
+    "end_date": "2027-01-01",
+    "annual_limit": 200000,
+    "remaining_limit": 100000,
+    "deductible": 500,
+    "riders": [
+      "commercial"
+    ],
+    "cover": "comprehensive"
+  },
+  {
+    "policy_id": "P-41100",
+    "holder_name": "Mariam Halim",
+    "national_id": "29246723617943",
+    "line": "travel",
+    "status": "pending",
+    "start_date": "2026-07-28",
+    "end_date": "2027-01-01",
+    "annual_limit": 80000,
+    "remaining_limit": 80000,
+    "deductible": 500,
+    "riders": []
+  },
+  {
+    "policy_id": "P-41101",
+    "holder_name": "Farida Attia",
+    "national_id": "28998747015912",
+    "line": "travel",
+    "status": "active",
+    "start_date": "2026-12-22",
+    "end_date": "2027-01-01",
+    "annual_limit": 50000,
+    "remaining_limit": 5000,
+    "deductible": 1000,
+    "riders": [
+      "adventure"
+    ]
+  },
+  {
+    "policy_id": "P-11102",
+    "holder_name": "Islam Shawky",
+    "national_id": "29473323542403",
+    "line": "health",
+    "status": "lapsed",
+    "start_date": "2025-10-08",
+    "end_date": "2027-01-01",
+    "annual_limit": 120000,
+    "remaining_limit": 120000,
+    "deductible": 0,
+    "riders": [
+      "maternity"
+    ]
+  },
+  {
+    "policy_id": "P-31103",
+    "holder_name": "Waleed Rashad",
+    "national_id": "28830872306667",
+    "line": "property",
+    "status": "active",
+    "start_date": "2024-02-08",
+    "end_date": "2027-01-01",
+    "annual_limit": 250000,
+    "remaining_limit": 250000,
+    "deductible": 250,
+    "riders": []
+  },
+  {
+    "policy_id": "P-41104",
+    "holder_name": "Ashraf Naguib",
+    "national_id": "29318566393823",
+    "line": "travel",
+    "status": "pending",
+    "start_date": "2024-07-21",
+    "end_date": "2027-01-01",
+    "annual_limit": 200000,
+    "remaining_limit": 0,
+    "deductible": 1000,
+    "riders": [
+      "adventure"
+    ]
+  },
+  {
+    "policy_id": "P-31105",
+    "holder_name": "Tamer Wahba",
+    "national_id": "28987235620303",
+    "line": "property",
+    "status": "active",
+    "start_date": "2025-02-22",
+    "end_date": "2027-01-01",
+    "annual_limit": 50000,
+    "remaining_limit": 5000,
+    "deductible": 500,
+    "riders": []
+  },
+  {
+    "policy_id": "P-41106",
+    "holder_name": "Yara Ghali",
+    "national_id": "29436083873519",
+    "line": "travel",
+    "status": "cancelled",
+    "start_date": "2025-02-22",
+    "end_date": "2027-01-01",
+    "annual_limit": 150000,
+    "remaining_limit": 2000,
+    "deductible": 0,
+    "riders": []
+  },
+  {
+    "policy_id": "P-31107",
+    "holder_name": "Mariam Wahba",
+    "national_id": "29410827745104",
+    "line": "property",
+    "status": "cancelled",
+    "start_date": "2026-04-19",
+    "end_date": "2027-01-01",
+    "annual_limit": 120000,
+    "remaining_limit": 2000,
+    "deductible": 250,
+    "riders": []
+  },
+  {
+    "policy_id": "P-21108",
+    "holder_name": "Farida Rashad",
+    "national_id": "28645975318262",
+    "line": "motor",
+    "status": "lapsed",
+    "start_date": "2025-03-04",
+    "end_date": "2027-01-01",
+    "annual_limit": 50000,
+    "remaining_limit": 50000,
+    "deductible": 0,
+    "riders": [],
+    "cover": "comprehensive"
+  },
+  {
+    "policy_id": "P-31109",
+    "holder_name": "Malak Fawzy",
+    "national_id": "28689046340270",
+    "line": "property",
+    "status": "active",
+    "start_date": "2024-03-24",
+    "end_date": "2027-01-01",
+    "annual_limit": 120000,
+    "remaining_limit": 60000,
+    "deductible": 0,
+    "riders": [
+      "flood"
+    ]
+  },
+  {
+    "policy_id": "P-41110",
+    "holder_name": "Tamer Darwish",
+    "national_id": "28618513893124",
+    "line": "travel",
+    "status": "active",
+    "start_date": "2026-04-20",
+    "end_date": "2027-01-01",
+    "annual_limit": 300000,
+    "remaining_limit": 0,
+    "deductible": 500,
+    "riders": []
+  },
+  {
+    "policy_id": "P-11111",
+    "holder_name": "Islam Selim",
+    "national_id": "29253450108054",
+    "line": "health",
+    "status": "active",
+    "start_date": "2025-12-15",
+    "end_date": "2027-01-01",
+    "annual_limit": 50000,
+    "remaining_limit": 0,
+    "deductible": 0,
+    "riders": []
+  },
+  {
+    "policy_id": "P-21112",
+    "holder_name": "Mariam Barakat",
+    "national_id": "29198466125177",
+    "line": "motor",
+    "status": "lapsed",
+    "start_date": "2026-12-11",
+    "end_date": "2027-01-01",
+    "annual_limit": 80000,
+    "remaining_limit": 40000,
+    "deductible": 500,
+    "riders": [],
+    "cover": "third_party_only"
+  },
+  {
+    "policy_id": "P-41113",
+    "holder_name": "Waleed Attia",
+    "national_id": "29452283756269",
+    "line": "travel",
+    "status": "active",
+    "start_date": "2025-08-08",
+    "end_date": "2027-01-01",
+    "annual_limit": 80000,
+    "remaining_limit": 40000,
+    "deductible": 500,
+    "riders": []
+  },
+  {
+    "policy_id": "P-41114",
+    "holder_name": "Waleed Fawzy",
+    "national_id": "28845430321140",
+    "line": "travel",
+    "status": "pending",
+    "start_date": "2025-06-05",
+    "end_date": "2027-01-01",
+    "annual_limit": 250000,
+    "remaining_limit": 250000,
+    "deductible": 1000,
+    "riders": []
+  },
+  {
+    "policy_id": "P-11115",
+    "holder_name": "Nada Naguib",
+    "national_id": "29316458527301",
+    "line": "health",
+    "status": "pending",
+    "start_date": "2025-03-18",
+    "end_date": "2027-01-01",
+    "annual_limit": 80000,
+    "remaining_limit": 0,
+    "deductible": 500,
+    "riders": [
+      "outpatient"
+    ]
+  },
+  {
+    "policy_id": "P-41116",
+    "holder_name": "Bassem Abdel-Rahman",
+    "national_id": "28817691853029",
+    "line": "travel",
+    "status": "lapsed",
+    "start_date": "2025-06-04",
+    "end_date": "2027-01-01",
+    "annual_limit": 200000,
+    "remaining_limit": 200000,
+    "deductible": 250,
+    "riders": []
+  },
+  {
+    "policy_id": "P-41117",
+    "holder_name": "Waleed Rizk",
+    "national_id": "29113516207200",
+    "line": "travel",
+    "status": "active",
+    "start_date": "2024-05-19",
+    "end_date": "2027-01-01",
+    "annual_limit": 120000,
+    "remaining_limit": 2000,
+    "deductible": 1000,
+    "riders": [
+      "adventure"
+    ]
+  },
+  {
+    "policy_id": "P-31118",
+    "holder_name": "Sameh Barakat",
+    "national_id": "29340536690954",
+    "line": "property",
+    "status": "active",
+    "start_date": "2025-06-01",
+    "end_date": "2027-01-01",
+    "annual_limit": 50000,
+    "remaining_limit": 2000,
+    "deductible": 250,
+    "riders": [
+      "all_risks"
+    ]
+  },
+  {
+    "policy_id": "P-11119",
+    "holder_name": "Amira Mansour",
+    "national_id": "29083025110578",
+    "line": "health",
+    "status": "active",
+    "start_date": "2025-07-15",
+    "end_date": "2027-01-01",
+    "annual_limit": 100000,
+    "remaining_limit": 5000,
+    "deductible": 250,
+    "riders": []
+  },
+  {
+    "policy_id": "P-31120",
+    "holder_name": "Malak Mansour",
+    "national_id": "28559628500646",
+    "line": "property",
+    "status": "active",
+    "start_date": "2024-10-02",
+    "end_date": "2027-01-01",
+    "annual_limit": 200000,
+    "remaining_limit": 200000,
+    "deductible": 0,
+    "riders": []
+  },
+  {
+    "policy_id": "P-41121",
+    "holder_name": "Islam Awad",
+    "national_id": "28798131649043",
+    "line": "travel",
+    "status": "active",
+    "start_date": "2026-02-12",
+    "end_date": "2027-01-01",
+    "annual_limit": 250000,
+    "remaining_limit": 125000,
+    "deductible": 0,
+    "riders": []
+  },
+  {
+    "policy_id": "P-41122",
+    "holder_name": "Hossam Halim",
+    "national_id": "28562703623248",
+    "line": "travel",
+    "status": "active",
+    "start_date": "2024-05-07",
+    "end_date": "2027-01-01",
+    "annual_limit": 150000,
+    "remaining_limit": 150000,
+    "deductible": 250,
+    "riders": []
+  },
+  {
+    "policy_id": "P-31123",
+    "holder_name": "Waleed Shawky",
+    "national_id": "29322475007249",
+    "line": "property",
+    "status": "active",
+    "start_date": "2024-03-13",
+    "end_date": "2027-01-01",
+    "annual_limit": 200000,
+    "remaining_limit": 200000,
+    "deductible": 250,
+    "riders": [
+      "all_risks"
+    ]
+  },
+  {
+    "policy_id": "P-11124",
+    "holder_name": "Hossam Naguib",
+    "national_id": "29002591667934",
+    "line": "health",
+    "status": "active",
+    "start_date": "2025-10-14",
+    "end_date": "2027-01-01",
+    "annual_limit": 250000,
+    "remaining_limit": 250000,
+    "deductible": 1000,
+    "riders": [
+      "dental"
+    ]
+  },
+  {
+    "policy_id": "P-41125",
+    "holder_name": "Waleed Selim",
+    "national_id": "28686078462460",
+    "line": "travel",
+    "status": "cancelled",
+    "start_date": "2026-08-27",
+    "end_date": "2027-01-01",
+    "annual_limit": 150000,
+    "remaining_limit": 150000,
+    "deductible": 500,
+    "riders": []
+  },
+  {
+    "policy_id": "P-41126",
+    "holder_name": "Ramy Naguib",
+    "national_id": "28940615847120",
+    "line": "travel",
+    "status": "lapsed",
+    "start_date": "2024-07-28",
+    "end_date": "2027-01-01",
+    "annual_limit": 80000,
+    "remaining_limit": 5000,
+    "deductible": 500,
+    "riders": []
+  },
+  {
+    "policy_id": "P-31127",
+    "holder_name": "Nada Darwish",
+    "national_id": "28627273730823",
+    "line": "property",
+    "status": "lapsed",
+    "start_date": "2026-04-25",
+    "end_date": "2027-01-01",
+    "annual_limit": 100000,
+    "remaining_limit": 5000,
+    "deductible": 500,
+    "riders": [
+      "flood"
+    ]
+  },
+  {
+    "policy_id": "P-21128",
+    "holder_name": "Mariam Barakat",
+    "national_id": "28689825836961",
+    "line": "motor",
+    "status": "lapsed",
+    "start_date": "2024-11-03",
+    "end_date": "2027-01-01",
+    "annual_limit": 80000,
+    "remaining_limit": 2000,
+    "deductible": 1000,
+    "riders": [],
+    "cover": "third_party_only"
+  },
+  {
+    "policy_id": "P-41129",
+    "holder_name": "Heba Rashad",
+    "national_id": "28574903210971",
+    "line": "travel",
+    "status": "active",
+    "start_date": "2025-11-10",
+    "end_date": "2027-01-01",
+    "annual_limit": 200000,
+    "remaining_limit": 200000,
+    "deductible": 500,
+    "riders": [
+      "adventure"
+    ]
+  },
+  {
+    "policy_id": "P-31130",
+    "holder_name": "Khaled Awad",
+    "national_id": "28540595660945",
+    "line": "property",
+    "status": "active",
+    "start_date": "2025-05-03",
+    "end_date": "2027-01-01",
+    "annual_limit": 80000,
+    "remaining_limit": 80000,
+    "deductible": 0,
+    "riders": [
+      "all_risks"
+    ]
+  },
+  {
+    "policy_id": "P-41131",
+    "holder_name": "Nourhan Wahba",
+    "national_id": "29162805910527",
+    "line": "travel",
+    "status": "active",
+    "start_date": "2026-03-02",
+    "end_date": "2027-01-01",
+    "annual_limit": 50000,
+    "remaining_limit": 25000,
+    "deductible": 0,
+    "riders": []
+  },
+  {
+    "policy_id": "P-11132",
+    "holder_name": "Hossam Halim",
+    "national_id": "28984075549229",
+    "line": "health",
+    "status": "active",
+    "start_date": "2026-09-20",
+    "end_date": "2027-01-01",
+    "annual_limit": 100000,
+    "remaining_limit": 2000,
+    "deductible": 500,
+    "riders": []
+  },
+  {
+    "policy_id": "P-31133",
+    "holder_name": "Bassem Fawzy",
+    "national_id": "29160045839791",
+    "line": "property",
+    "status": "active",
+    "start_date": "2026-11-11",
+    "end_date": "2027-01-01",
+    "annual_limit": 250000,
+    "remaining_limit": 0,
+    "deductible": 500,
+    "riders": []
+  },
+  {
+    "policy_id": "P-41134",
+    "holder_name": "Farida Rashad",
+    "national_id": "28587331124984",
+    "line": "travel",
+    "status": "lapsed",
+    "start_date": "2026-03-12",
+    "end_date": "2027-01-01",
+    "annual_limit": 150000,
+    "remaining_limit": 5000,
+    "deductible": 1000,
+    "riders": []
+  },
+  {
+    "policy_id": "P-11135",
+    "holder_name": "Ashraf Selim",
+    "national_id": "29370347176290",
+    "line": "health",
+    "status": "active",
+    "start_date": "2024-11-23",
+    "end_date": "2027-01-01",
+    "annual_limit": 150000,
+    "remaining_limit": 150000,
+    "deductible": 0,
+    "riders": [
+      "dental"
+    ]
+  },
+  {
+    "policy_id": "P-41136",
+    "holder_name": "Amira Rizk",
+    "national_id": "28698895065308",
+    "line": "travel",
+    "status": "active",
+    "start_date": "2025-08-07",
+    "end_date": "2027-01-01",
+    "annual_limit": 200000,
+    "remaining_limit": 2000,
+    "deductible": 250,
+    "riders": []
+  },
+  {
+    "policy_id": "P-11137",
+    "holder_name": "Waleed Darwish",
+    "national_id": "29096016368562",
+    "line": "health",
+    "status": "cancelled",
+    "start_date": "2026-09-02",
+    "end_date": "2027-01-01",
+    "annual_limit": 150000,
+    "remaining_limit": 150000,
+    "deductible": 500,
+    "riders": [
+      "outpatient"
+    ]
+  },
+  {
+    "policy_id": "P-41138",
+    "holder_name": "Sameh Sobhy",
+    "national_id": "29263779811221",
+    "line": "travel",
+    "status": "cancelled",
+    "start_date": "2026-03-24",
+    "end_date": "2027-01-01",
+    "annual_limit": 100000,
+    "remaining_limit": 50000,
+    "deductible": 0,
+    "riders": []
+  },
+  {
+    "policy_id": "P-31139",
+    "holder_name": "Nourhan Metwally",
+    "national_id": "29323570248966",
+    "line": "property",
+    "status": "cancelled",
+    "start_date": "2025-04-18",
+    "end_date": "2027-01-01",
+    "annual_limit": 120000,
+    "remaining_limit": 2000,
+    "deductible": 500,
+    "riders": []
+  },
+  {
+    "policy_id": "P-21140",
+    "holder_name": "Malak Awad",
+    "national_id": "29343796490407",
+    "line": "motor",
+    "status": "active",
+    "start_date": "2025-09-17",
+    "end_date": "2027-01-01",
+    "annual_limit": 200000,
+    "remaining_limit": 100000,
+    "deductible": 250,
+    "riders": [],
+    "cover": "third_party_only"
+  }
+]

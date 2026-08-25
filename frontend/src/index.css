@@ -1,0 +1,88 @@
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap');
+@import 'tailwindcss';
+
+@theme {
+  --font-sans: 'Inter', ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-display: 'Plus Jakarta Sans', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, 'Courier New', monospace;
+
+  --color-axa-blue: #00008F;
+  --color-axa-blue-dark: #00006B;
+  --color-axa-blue-mid: #0000B0;
+  --color-axa-blue-100: #E8E8FF;
+  --color-axa-blue-50: #F0F0FF;
+  --color-axa-red: #FF1721;
+  --color-axa-red-100: #FFE8E9;
+
+  --color-health: #059669;
+  --color-health-bg: #D1FAE5;
+  --color-motor: #2563EB;
+  --color-motor-bg: #DBEAFE;
+  --color-property: #D97706;
+  --color-property-bg: #FEF3C7;
+  --color-travel: #7C3AED;
+  --color-travel-bg: #EDE9FE;
+
+  --color-approved: #059669;
+  --color-approved-bg: #D1FAE5;
+  --color-rejected: #DC2626;
+  --color-rejected-bg: #FEE2E2;
+  --color-processing: #2563EB;
+  --color-processing-bg: #DBEAFE;
+  --color-waiting: #D97706;
+  --color-waiting-bg: #FEF3C7;
+  --color-review: #7C3AED;
+  --color-review-bg: #EDE9FE;
+  --color-risk-high: #DC2626;
+  --color-risk-high-bg: #FEE2E2;
+  --color-risk-medium: #D97706;
+  --color-risk-medium-bg: #FEF3C7;
+}
+
+body {
+  font-family: var(--font-sans);
+  background-color: #F4F5F9;
+  color: #111827;
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #CBD5E1 transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+*::-webkit-scrollbar-thumb {
+  background: #CBD5E1;
+  border-radius: 3px;
+}
+
+@keyframes spin-pulse {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+@keyframes progress-fill {
+  from { width: 0%; }
+  to { width: 100%; }
+}
+
+@keyframes fade-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-fade-in {
+  animation: fade-in 0.3s ease-out both;
+}
+
+.animate-spin-slow {
+  animation: spin-pulse 1.5s linear infinite;
+}

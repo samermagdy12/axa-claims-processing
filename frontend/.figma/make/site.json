@@ -1,0 +1,10 @@
+{
+  "description": "Streamlines insurance claim management with an intuitive interface, enabling users to efficiently submit, track, and process claims in real time.",
+  "robots": {
+    "index": false
+  },
+  "accessibility": {
+    "addBypassLinks": false,
+    "ignoreReducedMotion": false
+  }
+}

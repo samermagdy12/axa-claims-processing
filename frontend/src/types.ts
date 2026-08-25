@@ -116,6 +116,9 @@ export interface NavigateParams {
   selectedPolicyId?: string;
   selectedClaimId?: string;
   selectedAssessorClaimId?: string;
+  processingDocuments?: string;
+  completedExtractions?: string;
+  processingFailures?: string;
 }
 
 export type Screen =
@@ -144,4 +147,7 @@ export interface AppState {
   selectedPolicyId?: string;
   selectedClaimId?: string;
   selectedAssessorClaimId?: string;
+  processingDocuments?: string;
+  completedExtractions?: string;
+  processingFailures?: string;
 }

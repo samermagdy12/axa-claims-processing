@@ -45,6 +45,9 @@ export default function App() {
       ...(params.selectedAssessorClaimId !== undefined
         ? { selectedAssessorClaimId: params.selectedAssessorClaimId }
         : {}),
+      ...(params.processingDocuments !== undefined ? { processingDocuments: params.processingDocuments } : {}),
+      ...(params.completedExtractions !== undefined ? { completedExtractions: params.completedExtractions } : {}),
+      ...(params.processingFailures !== undefined ? { processingFailures: params.processingFailures } : {}),
     }));
   };
 
@@ -58,7 +61,7 @@ export default function App() {
 
   const signOut = () => { localStorage.removeItem('axa_access_token'); setToken(null); setAppState(INITIAL_STATE); };
 
-  const { screen, role, userName, userEmail, selectedPolicyId, selectedClaimId, selectedAssessorClaimId } =
+  const { screen, role, userName, userEmail, selectedPolicyId, selectedClaimId, selectedAssessorClaimId, processingDocuments, completedExtractions, processingFailures } =
     appState;
 
   // ── Auth screens (no layout) ────────────────────────────────────────────────
@@ -89,7 +92,13 @@ export default function App() {
 
   // ── Claim processing (full screen, no sidebar) ──────────────────────────────
   if (screen === 'claim-processing') {
-    return <ClaimProcessing navigate={navigate} />;
+    return <ClaimProcessing
+      claimId={selectedClaimId || ''}
+      documentsProcessed={Number(processingDocuments || 0)}
+      extractionsCompleted={Number(completedExtractions || 0)}
+      processingFailures={Number(processingFailures || 0)}
+      navigate={navigate}
+    />;
   }
 
   // ── Authenticated screens (with layout) ────────────────────────────────────

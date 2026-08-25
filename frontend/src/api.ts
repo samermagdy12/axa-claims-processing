@@ -32,6 +32,18 @@ export interface UploadedClaimDocument {
   claim_status: Claim['status'];
 }
 
+export interface DocumentExtraction {
+  extraction_id: string;
+  claim_id: string;
+  document_id: string;
+  document_type: string;
+  strategy: string;
+  text_length: number;
+  extraction_confidence: number | null;
+  extracted_at: string;
+  reused: boolean;
+}
+
 type ApiClaim = {
   claim_id: string; policy_id: string; policy_number: string; product_line: Claim['productLine'];
   claim_type: string; incident_date: string; submission_date: string; claimed_amount: number;
@@ -88,6 +100,12 @@ export async function uploadClaimDocument(token: string, claimId: string, docume
     throw new Error(body?.detail || 'Unable to upload the document.');
   }
   return response.json() as Promise<UploadedClaimDocument>;
+}
+export function extractClaimDocument(token: string, claimId: string, documentId: string): Promise<DocumentExtraction> {
+  return request<DocumentExtraction>(`/claims/${encodeURIComponent(claimId)}/documents/${encodeURIComponent(documentId)}/extract`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+  });
 }
 export function createClaim(token: string, data: { policyId: string; claimType: string; incidentDate: string; claimedAmount: number; description: string }) {
   return request<CreatedClaim>('/claims', { method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: JSON.stringify({ policy_id: data.policyId, claim_type: data.claimType, incident_date: data.incidentDate, claimed_amount: data.claimedAmount, description: data.description }) });

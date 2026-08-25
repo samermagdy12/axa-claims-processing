@@ -10,16 +10,25 @@ from typing import Callable
 VISUAL_EVIDENCE_DOCUMENT_TYPES = {"Photos of Damage", "Spare Key"}
 _CURRENCIES = "EGP|USD|EUR|GBP"
 _YEAR = r"(?:19|20)\d{2}"
+_COMMON_LABELS = {
+    "registration number", "vehicle identification number vin", "owner name", "vehicle make", "vehicle model",
+    "model year", "registration expiry date", "report number", "incident date", "incident time", "location",
+    "driver", "vehicle", "incident summary", "customer", "estimate number", "damage assessment",
+    "name", "full name", "licence number", "license number", "date of birth", "issue date", "expiry date",
+    "address", "vehicle class", "class", "restrictions", "member id", "policy number", "invoice number",
+    "invoice date", "total amount", "subtotal", "tax", "vat", "patient", "diagnosis", "treatment",
+}
 
 
 def extract_structured_data(document_type: str, raw_text: str) -> dict:
     """Conservatively interpret raw text without changing the raw source."""
     if document_type in VISUAL_EVIDENCE_DOCUMENT_TYPES:
-        return {"visual_evidence_preserved": True}
+        return {"visual_evidence_preserved": True, "structured_extraction_available": False}
     parser = STRUCTURED_EXTRACTORS.get(document_type)
     if parser is None or not raw_text or not raw_text.strip():
-        return {}
-    return parser(_normalise_for_parsing(raw_text))
+        return {"structured_extraction_available": False, "reason": "No reliable structured fields could be extracted"}
+    data = parser(_normalise_for_parsing(raw_text))
+    return data or {"structured_extraction_available": False, "reason": "No reliable structured fields could be extracted"}
 
 
 def _normalise_for_parsing(text: str) -> list[str]:
@@ -34,7 +43,8 @@ def _key(value: str) -> str:
 
 def _valid_value(value: str, labels: set[str]) -> bool:
     candidate = value.strip(" :#-")
-    if not candidate or _key(candidate) in labels:
+    candidate_key = _key(candidate)
+    if not candidate or candidate_key in labels or candidate_key in _COMMON_LABELS:
         return False
     # Avoid interpreting document titles, section headings, or table headings as values.
     forbidden = ("repair estimate", "estimate no", "estimated repair items", "parts (", "labour (", "total (", "damage assessment")
@@ -88,6 +98,39 @@ def _currency(lines: list[str]) -> str | None:
 
 def _integer(value: str | None) -> int | None:
     return int(value) if value and value.isdigit() else None
+
+
+def _vehicle_year(value: str | None) -> int | None:
+    year = _integer(value)
+    return year if year is not None and 1900 <= year <= datetime.now().year + 1 else None
+
+
+def _vin(value: str | None) -> str | None:
+    if not value:
+        return None
+    compact = re.sub(r"\s+", "", value).upper()
+    return compact if re.fullmatch(r"[A-HJ-NPR-Z0-9]{17}", compact) else None
+
+
+def _registration_number(value: str | None) -> str | None:
+    if not value:
+        return None
+    compact = re.sub(r"\s+", "", value).upper()
+    return compact if re.fullmatch(r"[A-Z0-9]{2,12}(?:-[A-Z0-9]{1,12})+|[A-Z0-9]{4,16}", compact) else None
+
+
+def _licence_class(value: str | None) -> str | None:
+    if not value:
+        return None
+    candidate = value.strip().upper()
+    # Known licence categories; reject OCR fragments such as "9aEnd".
+    return candidate if re.fullmatch(r"(?:A|A1|B|B1|C|C1|D|D1|E|M)", candidate) else None
+
+
+def _time(value: str | None) -> str | None:
+    if not value or not re.fullmatch(r"(?:[01]?\d|2[0-3]):[0-5]\d", value.strip()):
+        return None
+    return value.strip().zfill(5)
 
 
 def _empty_repair_estimate() -> dict:
@@ -165,14 +208,24 @@ def _drivers_licence(lines: list[str]) -> dict:
         authority = next((line.title() for line in lines[:2] if re.fullmatch(r"(?:south|north) carolina|egypt|cairo", line, re.I)), None)
     return {"full_name": _line_value(lines, "name", "full name"), "licence_number": _line_value(lines, "licence number", "license number", "dl number"),
             "date_of_birth": _labelled_date(lines, "dob", "date of birth", month_first=True), "issue_date": _labelled_date(lines, "issue date", "issued", month_first=True),
-            "expiry_date": _labelled_date(lines, "expiry date", "expiration date", "expires", month_first=True), "vehicle_class": _line_value(lines, "vehicle class", "class"),
-            "issuing_authority": authority, "address": _line_value(lines, "address")}
+            "expiry_date": _labelled_date(lines, "expiry date", "expiration date", "expires", month_first=True), "vehicle_class": _licence_class(_line_value(lines, "vehicle class", "class")),
+            "issuing_authority": authority, "address": _line_value(lines, "address"), "sex": _line_value(lines, "sex", "gender"),
+            "restrictions": _line_value(lines, "restrictions", "restriction")}
 
 
 def _vehicle_registration(lines: list[str]) -> dict:
-    return {"owner_name": _line_value(lines, "owner", "registered to"), "registration_number": _line_value(lines, "registration number", "registration", "reg number"),
-            "vehicle_make": _line_value(lines, "make"), "vehicle_model": _line_value(lines, "model"), "model_year": _integer(_line_value(lines, "model year", "year")),
-            "vin": _line_value(lines, "vin"), "registration_expiry": _labelled_date(lines, "registration expiry", "registration expiration", "expiry date")}
+    return {"owner_name": _line_value(lines, "owner name", "owner", "registered to"),
+            "registration_number": _registration_number(_line_value(lines, "registration number", "registration", "reg number")),
+            "vin": _vin(_line_value(lines, "vehicle identification number vin", "vehicle identification number", "vin")),
+            "national_id": _line_value(lines, "national id", "national identification number"),
+            "vehicle_make": _line_value(lines, "vehicle make", "make"), "vehicle_model": _line_value(lines, "vehicle model", "model"),
+            "model_year": _vehicle_year(_line_value(lines, "model year", "year")), "vehicle_type": _line_value(lines, "vehicle type", "type"),
+            "colour": _line_value(lines, "colour", "color"), "engine_number": _line_value(lines, "engine number"),
+            "engine_capacity_cc": _integer(_line_value(lines, "engine capacity cc", "engine capacity")), "fuel_type": _line_value(lines, "fuel type"),
+            "number_of_seats": _integer(_line_value(lines, "number of seats", "seats")),
+            "registration_issue_date": _labelled_date(lines, "registration issue date", "issue date"),
+            "registration_expiry_date": _labelled_date(lines, "registration expiry date", "registration expiry", "registration expiration", "expiry date"),
+            "issuing_authority": _line_value(lines, "issuing authority", "authority"), "status": _line_value(lines, "status")}
 
 
 def _invoice(lines: list[str]) -> dict:
@@ -189,9 +242,17 @@ def _medical_report(lines: list[str]) -> dict:
 
 
 def _police_report(lines: list[str]) -> dict:
+    vehicle = _line_value(lines, "vehicle", "vehicle information")
+    registration = None
+    if vehicle:
+        match = re.search(r"\bregistration\s+([A-Z0-9-]{4,16})\b", vehicle, re.I)
+        registration = _registration_number(match.group(1)) if match else None
+    narrative = _line_value(lines, "incident summary", "summary")
     return {"report_number": _line_value(lines, "report number", "report no", "police report number"), "incident_date": _labelled_date(lines, "incident date", "accident date"),
-            "incident_location": _line_value(lines, "incident location", "accident location"), "reporting_authority": _line_value(lines, "reporting authority", "police station", "authority"),
-            "involved_parties": _split_list(_line_value(lines, "involved parties", "parties")), "vehicle_information": _line_value(lines, "vehicle", "vehicle information")}
+            "incident_time": _time(_line_value(lines, "incident time", "time")), "incident_location": _line_value(lines, "incident location", "accident location", "location"),
+            "reporting_authority": _line_value(lines, "reporting authority", "police station", "authority"), "driver_name": _line_value(lines, "driver", "driver name"),
+            "vehicle_information": vehicle, "registration_number": registration, "incident_summary": narrative, "officer_notes": _line_value(lines, "officer notes", "notes"),
+            "injuries_reported": _line_value(lines, "injuries reported", "injuries"), "raw_narrative": narrative}
 
 
 def _member_id(lines: list[str]) -> dict:

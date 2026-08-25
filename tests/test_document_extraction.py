@@ -103,7 +103,7 @@ VIN: 1HGCM82633A004352
 Registration Expiry: 2027-06-18""")
         self.assertEqual(registration["owner_name"], "Mona Adel")
         self.assertEqual(registration["model_year"], 2022)
-        self.assertEqual(registration["registration_expiry"], "2027-06-18")
+        self.assertEqual(registration["registration_expiry_date"], "2027-06-18")
 
         estimate = extract_structured_data("Repair Estimate", """Garage: ABC Garage
 Estimate Number: EST-102
@@ -174,11 +174,74 @@ This estimate is valid for 30 days and is provided for insurance claim assessmen
 
     def test_visual_and_other_dedicated_parsers_do_not_invent_facts(self):
         visual = extract_structured_data("Photos of Damage", "")
-        self.assertEqual(visual, {"visual_evidence_preserved": True})
+        self.assertEqual(visual, {"visual_evidence_preserved": True, "structured_extraction_available": False})
         receipt = extract_structured_data("Receipts for Essentials", "Invoice Number\nREC-42\nTotal Amount\nEGP 250")
         self.assertEqual(receipt["invoice_number"], "REC-42")
         self.assertEqual(receipt["total_amount"], 250.0)
         self.assertIsNone(receipt["provider_name"])
+
+    def test_vehicle_registration_uses_full_labels_and_validates_vin(self):
+        registration = extract_structured_data("Vehicle Registration", """Registration Number
+ABC-1234
+Vehicle Identification Number (VIN)
+JTDBR32E720123456
+Owner Name
+Mona Adel
+Vehicle Make
+Toyota
+Vehicle Model
+Corolla
+Model Year
+2022
+Registration Expiry Date
+31 May 2027""")
+        self.assertEqual(registration["registration_number"], "ABC-1234")
+        self.assertEqual(registration["vin"], "JTDBR32E720123456")
+        self.assertEqual(registration["owner_name"], "Mona Adel")
+        self.assertEqual(registration["vehicle_make"], "Toyota")
+        self.assertEqual(registration["vehicle_model"], "Corolla")
+        self.assertEqual(registration["registration_expiry_date"], "2027-05-31")
+
+    def test_police_report_and_licence_validate_fields_and_preserve_narrative(self):
+        police = extract_structured_data("Police Report", """REPORT NUMBER
+PR-12345
+INCIDENT DATE
+18 June 2026
+INCIDENT TIME
+14:35
+LOCATION
+Nasr City, Cairo
+DRIVER
+Mona Adel
+VEHICLE
+Toyota Corolla - Registration ABC-1234
+INCIDENT SUMMARY
+Vehicle was hit from behind while stopped at a traffic signal.""")
+        self.assertEqual(police["report_number"], "PR-12345")
+        self.assertEqual(police["incident_date"], "2026-06-18")
+        self.assertEqual(police["incident_time"], "14:35")
+        self.assertEqual(police["incident_location"], "Nasr City, Cairo")
+        self.assertEqual(police["driver_name"], "Mona Adel")
+        self.assertEqual(police["registration_number"], "ABC-1234")
+        self.assertIn("hit from behind", police["raw_narrative"])
+        licence = extract_structured_data("Driver's Licence", "Class\n9aEnd\nLicence Number\nDL-10001")
+        self.assertIsNone(licence["vehicle_class"])
+        self.assertEqual(licence["licence_number"], "DL-10001")
+
+    def test_every_requirement_document_type_has_an_intentional_parser_or_visual_result(self):
+        from app.claim_requirements import REQUIRED_DOCUMENTS
+
+        document_types = {document_type for claim_types in REQUIRED_DOCUMENTS.values() for documents in claim_types.values() for document_type in documents}
+        self.assertEqual(len(document_types), 28)
+        for document_type in document_types:
+            with self.subTest(document_type=document_type):
+                text = "Garage: Example Garage\nEstimate Number: EST-100" if document_type == "Repair Estimate" else "Reference: REF-100\nDate: 18 June 2026"
+                result = extract_structured_data(document_type, text)
+                if document_type in {"Photos of Damage", "Spare Key"}:
+                    self.assertEqual(result["visual_evidence_preserved"], True)
+                    self.assertEqual(result["structured_extraction_available"], False)
+                else:
+                    self.assertNotEqual(result, {})
 
     def test_structures_invoice_medical_police_and_member_id_without_fabrication(self):
         invoice = extract_structured_data("Itemised Invoice", """Provider: Cairo Clinic
@@ -195,7 +258,7 @@ Total Amount: EGP 1140""")
         self.assertEqual(police["report_number"], "PR-100")
         member = extract_structured_data("Member ID", "Member Name: Layla Mostafa\nMember ID: MID-123\nPolicy Number: POL-88\nExpiry: 2027-06-18")
         self.assertEqual(member["member_id"], "MID-123")
-        self.assertEqual(extract_structured_data("Repair Estimate", "unreadable OCR fragments"), {})
+        self.assertEqual(extract_structured_data("Repair Estimate", "unreadable OCR fragments")["structured_extraction_available"], False)
     def test_extracts_native_docx_text(self):
         with TemporaryDirectory() as directory:
             path = Path(directory) / "estimate.docx"
@@ -246,9 +309,9 @@ Total Amount: EGP 1140""")
         self.assertEqual(db.extraction["extracted_data"]["document_id"], str(db.document_id))
         self.assertEqual(db.extraction["extracted_data"]["extracted_text"], "Repair estimate: EGP 7,500")
         self.assertEqual(db.extraction["extracted_data"]["raw_extraction"]["text"], "Repair estimate: EGP 7,500")
-        self.assertEqual(db.extraction["extracted_data"]["structured_data"], {})
+        self.assertEqual(db.extraction["extracted_data"]["structured_data"]["structured_extraction_available"], False)
         self.assertEqual(first["raw_text"], "Repair estimate: EGP 7,500")
-        self.assertEqual(first["structured_data"], {})
+        self.assertEqual(first["structured_data"]["structured_extraction_available"], False)
         self.assertTrue(db.committed)
 
     def test_rejects_another_customers_claim_and_missing_files(self):

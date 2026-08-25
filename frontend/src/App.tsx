@@ -1,11 +1,10 @@
 import { useState } from 'react';
-import type { AppState, Screen, Role } from './types';
+import type { AppState, Screen } from './types';
 import { Layout } from './components/Layout';
 
 // Auth
 import LandingPage from './screens/auth/LandingPage';
 import SignUpPage from './screens/auth/SignUpPage';
-import PolicyVerification from './screens/auth/PolicyVerification';
 
 // Customer
 import CustomerHome from './screens/customer/CustomerHome';
@@ -32,11 +31,7 @@ const INITIAL_STATE: AppState = {
 
 export default function App() {
   const [appState, setAppState] = useState<AppState>(INITIAL_STATE);
-  const [signUpData, setSignUpData] = useState<{
-    fullName: string;
-    email: string;
-    nationalId: string;
-  } | null>(null);
+  const [token, setToken] = useState<string | null>(null);
 
   const navigate = (screen: Screen, params: Record<string, string> = {}) => {
     setAppState(prev => ({
@@ -50,13 +45,13 @@ export default function App() {
     }));
   };
 
-  const signIn = (role: Role, name: string) => {
-    const homeScreen: Screen =
-      role === 'customer' ? 'customer-home' : role === 'assessor' ? 'assessor-queue' : 'operations';
-    setAppState({ screen: homeScreen, role, userName: name });
+  const signIn = (session: { access_token: string; user: { user_id: string; full_name: string; email: string; role: string } }) => {
+    localStorage.setItem('axa_access_token', session.access_token);
+    setToken(session.access_token);
+    setAppState({ screen: 'customer-home', role: 'customer', userId: session.user.user_id, userName: session.user.full_name });
   };
 
-  const signOut = () => setAppState(INITIAL_STATE);
+  const signOut = () => { localStorage.removeItem('axa_access_token'); setToken(null); setAppState(INITIAL_STATE); };
 
   const { screen, role, userName, selectedPolicyId, selectedClaimId, selectedAssessorClaimId } =
     appState;
@@ -66,20 +61,8 @@ export default function App() {
     if (screen === 'signup') {
       return (
         <SignUpPage
-          onNext={data => {
-            setSignUpData(data);
-            navigate('policy-verification');
-          }}
+          onComplete={() => navigate('landing')}
           onGoSignIn={() => navigate('landing')}
-        />
-      );
-    }
-    if (screen === 'policy-verification' && signUpData) {
-      return (
-        <PolicyVerification
-          userName={signUpData.fullName}
-          nationalId={signUpData.nationalId}
-          onComplete={() => signIn('customer', signUpData.fullName)}
         />
       );
     }
@@ -106,7 +89,7 @@ export default function App() {
           {screen === 'customer-home' && (
             <CustomerHome userName={userName || 'Customer'} navigate={navigate} />
           )}
-          {screen === 'my-policies' && <MyPolicies navigate={navigate} />}
+          {screen === 'my-policies' && <MyPolicies navigate={navigate} token={token || ''} />}
           {screen === 'policy-details' && (
             <PolicyDetails policyId={selectedPolicyId || ''} navigate={navigate} />
           )}

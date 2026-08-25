@@ -1,10 +1,11 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Card, Button, ProductBadge, PolicyStatusBadge, PageHeader, Amount, ProgressBar, Alert } from '../../components/UI';
-import { CUSTOMER_POLICIES } from '../../data';
-import type { Screen, ProductLine } from '../../types';
+import { getMyPolicies } from '../../api';
+import type { Policy, Screen, ProductLine } from '../../types';
 
 interface MyPoliciesProps {
   navigate: (screen: Screen, params?: Record<string, string>) => void;
+  token: string;
 }
 
 const LINE_FILTERS: { label: string; value: ProductLine | 'ALL' }[] = [
@@ -15,16 +16,26 @@ const LINE_FILTERS: { label: string; value: ProductLine | 'ALL' }[] = [
   { label: 'Travel', value: 'TRAVEL' },
 ];
 
-export default function MyPolicies({ navigate }: MyPoliciesProps) {
+export default function MyPolicies({ navigate, token }: MyPoliciesProps) {
   const [filter, setFilter] = useState<ProductLine | 'ALL'>('ALL');
+  const [allPolicies, setAllPolicies] = useState<Policy[]>([]);
+  const [error, setError] = useState('');
+  const [isLoading, setIsLoading] = useState(true);
 
-  const policies = filter === 'ALL' ? CUSTOMER_POLICIES : CUSTOMER_POLICIES.filter(p => p.productLine === filter);
+  useEffect(() => {
+    getMyPolicies(token)
+      .then(setAllPolicies)
+      .catch(err => setError(err instanceof Error ? err.message : 'Unable to load policies.'))
+      .finally(() => setIsLoading(false));
+  }, [token]);
+
+  const policies = filter === 'ALL' ? allPolicies : allPolicies.filter(p => p.productLine === filter);
 
   return (
     <div className="animate-fade-in">
       <PageHeader
         title="My Policies"
-        subtitle={`${CUSTOMER_POLICIES.length} policies linked to your account`}
+        subtitle={`${allPolicies.length} policies linked to your account`}
         action={<Button onClick={() => navigate('new-claim')}>+ New Claim</Button>}
       />
 
@@ -44,6 +55,10 @@ export default function MyPolicies({ navigate }: MyPoliciesProps) {
           </button>
         ))}
       </div>
+
+      {isLoading && <p className="text-sm text-gray-500">Loading your policies…</p>}
+      {error && <Alert variant="error">{error}</Alert>}
+      {!isLoading && !error && policies.length === 0 && <Alert variant="info">No policies are assigned to your account.</Alert>}
 
       <div className="space-y-4">
         {policies.map(policy => {

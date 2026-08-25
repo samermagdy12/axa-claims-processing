@@ -1,14 +1,17 @@
 import { useState } from 'react';
 import { Button, Input, Alert, AxaLogo } from '../../components/UI';
+import { registerCustomer } from '../../api';
 
 interface SignUpPageProps {
-  onNext: (data: { fullName: string; email: string; nationalId: string }) => void;
+  onComplete: () => void;
   onGoSignIn: () => void;
 }
 
-export default function SignUpPage({ onNext, onGoSignIn }: SignUpPageProps) {
+export default function SignUpPage({ onComplete, onGoSignIn }: SignUpPageProps) {
   const [form, setForm] = useState({ fullName: '', email: '', password: '', confirmPassword: '', nationalId: '' });
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [submitError, setSubmitError] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const set = (k: string) => (e: React.ChangeEvent<HTMLInputElement>) =>
     setForm(prev => ({ ...prev, [k]: e.target.value }));
@@ -23,11 +26,15 @@ export default function SignUpPage({ onNext, onGoSignIn }: SignUpPageProps) {
     return e;
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const errs = validate();
     if (Object.keys(errs).length > 0) { setErrors(errs); return; }
-    onNext({ fullName: form.fullName, email: form.email, nationalId: form.nationalId });
+    setSubmitError('');
+    setIsSubmitting(true);
+    try { await registerCustomer(form); onComplete(); }
+    catch (error) { setSubmitError(error instanceof Error ? error.message : 'Unable to create your account.'); }
+    finally { setIsSubmitting(false); }
   };
 
   return (
@@ -104,12 +111,12 @@ export default function SignUpPage({ onNext, onGoSignIn }: SignUpPageProps) {
                 error={errors.confirmPassword}
               />
 
-              <Alert variant="info">
-                Your National ID will be used to locate your existing policies. You will select which policies belong to you on the next screen.
-              </Alert>
+              <Alert variant="info">After registration, sign in to view policies already assigned to your account.</Alert>
 
-              <Button type="submit" className="w-full" size="lg">
-                Continue to Policy Verification →
+              {submitError && <Alert variant="error">{submitError}</Alert>}
+
+              <Button type="submit" className="w-full" size="lg" disabled={isSubmitting}>
+                {isSubmitting ? 'Creating account…' : 'Create Account'}
               </Button>
             </form>
 

@@ -1,9 +1,10 @@
 import { useState } from 'react';
 import { Button, Input, Alert } from '../../components/UI';
 import type { Role } from '../../types';
+import { login } from '../../api';
 
 interface LandingPageProps {
-  onSignIn: (role: Role, name: string) => void;
+  onSignIn: (session: { access_token: string; user: { user_id: string; full_name: string; email: string; role: string } }) => void;
   onGoSignUp: () => void;
 }
 
@@ -54,6 +55,7 @@ export default function LandingPage({ onSignIn, onGoSignUp }: LandingPageProps) 
   const [password, setPassword] = useState('demo');
   const [error, setError] = useState('');
   const [selectedRole, setSelectedRole] = useState<Role>('customer');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleRoleSelect = (r: typeof DEMO_ROLES[0]) => {
     setSelectedRole(r.role);
@@ -62,15 +64,14 @@ export default function LandingPage({ onSignIn, onGoSignUp }: LandingPageProps) 
     setError('');
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!password) { setError('Please enter your password.'); return; }
-    const match = DEMO_ROLES.find(r => r.email === email);
-    if (match) {
-      onSignIn(match.role, match.name);
-    } else {
-      setError('No account found. Use a demo account below or create one.');
-    }
+    setError('');
+    setIsSubmitting(true);
+    try { onSignIn(await login({ email, password })); }
+    catch (requestError) { setError(requestError instanceof Error ? requestError.message : 'Unable to sign in.'); }
+    finally { setIsSubmitting(false); }
   };
 
   return (
@@ -200,7 +201,7 @@ export default function LandingPage({ onSignIn, onGoSignUp }: LandingPageProps) 
 
             {error && <Alert variant="error">{error}</Alert>}
 
-            <Button type="submit" className="w-full" size="lg">
+            <Button type="submit" className="w-full" size="lg" disabled={isSubmitting}>
               Sign In →
             </Button>
           </form>

@@ -42,15 +42,22 @@ def serialize_policy(policy: dict) -> dict:
 
 @app.post("/auth/register", response_model=AuthResponse, status_code=status.HTTP_201_CREATED)
 def register(payload: RegisterRequest, db: Session = Depends(get_db)):
-    existing_user = db.execute(text("SELECT user_id FROM users WHERE email = :email OR national_id = :national_id"), {"email": str(payload.email).lower(), "national_id": payload.national_id}).first()
-    if existing_user:
+    email = str(payload.email).lower()
+    existing_email = db.execute(text("SELECT user_id FROM users WHERE email = :email"), {"email": email}).first()
+    if existing_email:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Email or national ID is already registered")
+    existing_national_id = db.execute(text("SELECT user_id, email, status FROM users WHERE national_id = :national_id"), {"national_id": payload.national_id}).mappings().first()
+    if existing_national_id and (existing_national_id["status"] != "inactive" or not existing_national_id["email"].endswith("@policy-import.local")):
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Email or national ID is already registered")
     customer_role = db.execute(text("SELECT role_id FROM roles WHERE role_name = 'Customer'")).mappings().first()
     if customer_role is None:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Customer role is not configured")
     try:
-        user = db.execute(text("INSERT INTO users (full_name, email, password_hash, national_id) VALUES (:full_name, :email, :password_hash, :national_id) RETURNING user_id, full_name, email"), {"full_name": payload.full_name.strip(), "email": str(payload.email).lower(), "password_hash": hash_password(payload.password), "national_id": payload.national_id}).mappings().one()
-        db.execute(text("INSERT INTO user_roles (user_id, role_id) VALUES (:user_id, :role_id)"), {"user_id": user["user_id"], "role_id": customer_role["role_id"]})
+        if existing_national_id:
+            user = db.execute(text("UPDATE users SET full_name = :full_name, email = :email, password_hash = :password_hash, status = 'active', updated_at = CURRENT_TIMESTAMP WHERE user_id = :user_id RETURNING user_id, full_name, email"), {"user_id": existing_national_id["user_id"], "full_name": payload.full_name.strip(), "email": email, "password_hash": hash_password(payload.password)}).mappings().one()
+        else:
+            user = db.execute(text("INSERT INTO users (full_name, email, password_hash, national_id) VALUES (:full_name, :email, :password_hash, :national_id) RETURNING user_id, full_name, email"), {"full_name": payload.full_name.strip(), "email": email, "password_hash": hash_password(payload.password), "national_id": payload.national_id}).mappings().one()
+        db.execute(text("INSERT INTO user_roles (user_id, role_id) VALUES (:user_id, :role_id) ON CONFLICT DO NOTHING"), {"user_id": user["user_id"], "role_id": customer_role["role_id"]})
         db.commit()
     except Exception:
         db.rollback()

@@ -102,8 +102,8 @@ Year: 2022
 VIN: 1HGCM82633A004352
 Registration Expiry: 2027-06-18""")
         self.assertEqual(registration["owner_name"], "Mona Adel")
-        self.assertEqual(registration["vehicle_year"], 2022)
-        self.assertEqual(registration["registration_expiry_date"], "2027-06-18")
+        self.assertEqual(registration["model_year"], 2022)
+        self.assertEqual(registration["registration_expiry"], "2027-06-18")
 
         estimate = extract_structured_data("Repair Estimate", """Garage: ABC Garage
 Estimate Number: EST-102
@@ -115,10 +115,70 @@ Damage: rear bumper deformation, trunk lid creasing
 - Paint work EGP 4650
 Total Estimated: EGP 7,500""")
         self.assertEqual(estimate["garage_name"], "ABC Garage")
-        self.assertEqual(estimate["estimate_date"], "2026-06-18")
-        self.assertEqual(estimate["total_estimated_cost"], 7500.0)
+        self.assertEqual(estimate["issued_date"], "2026-06-18")
+        self.assertEqual(estimate["total_estimated_repair_cost"], 7500.0)
         self.assertEqual(estimate["currency"], "EGP")
-        self.assertEqual(len(estimate["repair_items"]), 2)
+        self.assertEqual(len(estimate["repair_items"]), 0)
+
+    def test_repair_estimate_label_value_layout_is_complete_and_never_uses_titles(self):
+        data = extract_structured_data("Repair Estimate", """ABC Garage
+Vehicle Repair Estimate
+
+Estimate No.
+EST-2026-0618
+
+Issued
+18 June 2026
+
+Customer
+Mona Adel
+
+Vehicle
+Toyota Corolla - 2022
+
+Registration
+ABC-1234
+
+Claim reference
+AXA-MTR-2026-00421
+
+Damage assessment
+Inspection found rear-end collision damage: rear bumper deformation, trunk lid creasing, and a cracked right tail lamp. The vehicle is safe to tow but repairs are required before normal use.
+
+Estimated repair items
+
+Item | Parts (EGP) | Labour (EGP) | Total (EGP)
+Rear bumper cover replacement | 2,850 | 900 | 3,750
+Trunk lid repair and paint | 1,250 | 1,100 | 2,350
+Right tail lamp assembly | 980 | 120 | 1,100
+Paint materials and alignment | 0 | 300 | 300
+
+TOTAL ESTIMATED REPAIR COST
+7,500
+
+This estimate is valid for 30 days and is provided for insurance claim assessment.""")
+        self.assertEqual(data["garage_name"], "ABC Garage")
+        self.assertEqual(data["estimate_number"], "EST-2026-0618")
+        self.assertEqual(data["issued_date"], "2026-06-18")
+        self.assertEqual(data["customer_name"], "Mona Adel")
+        self.assertEqual(data["vehicle"]["make_model"], "Toyota Corolla")
+        self.assertEqual(data["vehicle"]["year"], 2022)
+        self.assertEqual(data["registration_number"], "ABC-1234")
+        self.assertEqual(data["claim_reference"], "AXA-MTR-2026-00421")
+        self.assertEqual(data["total_estimated_repair_cost"], 7500.0)
+        self.assertEqual(len(data["repair_items"]), 4)
+        self.assertIn("rear-end collision damage", data["damage_description"])
+        self.assertNotEqual(data["damage_description"], "assessment")
+        self.assertNotEqual(data["vehicle"], "Repair Estimate")
+        self.assertNotEqual(data["garage_name"], "Vehicle Repair Estimate")
+
+    def test_visual_and_other_dedicated_parsers_do_not_invent_facts(self):
+        visual = extract_structured_data("Photos of Damage", "")
+        self.assertEqual(visual, {"visual_evidence_preserved": True})
+        receipt = extract_structured_data("Receipts for Essentials", "Invoice Number\nREC-42\nTotal Amount\nEGP 250")
+        self.assertEqual(receipt["invoice_number"], "REC-42")
+        self.assertEqual(receipt["total_amount"], 250.0)
+        self.assertIsNone(receipt["provider_name"])
 
     def test_structures_invoice_medical_police_and_member_id_without_fabrication(self):
         invoice = extract_structured_data("Itemised Invoice", """Provider: Cairo Clinic

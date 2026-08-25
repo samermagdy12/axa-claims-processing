@@ -1,4 +1,4 @@
-"""Deterministic, document-type-specific parsing layered over raw OCR text."""
+"""Validated document-type parsers layered over immutable raw extraction text."""
 from __future__ import annotations
 
 import re
@@ -7,186 +7,243 @@ from decimal import Decimal, InvalidOperation
 from typing import Callable
 
 
-def extract_structured_data(document_type: str, text: str) -> dict:
-    """Return only values evidenced by the supplied raw text.
-
-    New document parsers can be registered in ``STRUCTURED_EXTRACTORS`` without
-    changing the OCR pipeline or its storage contract.
-    """
-    extractor = STRUCTURED_EXTRACTORS.get(document_type)
-    return extractor(text) if extractor and text.strip() else {}
+VISUAL_EVIDENCE_DOCUMENT_TYPES = {"Photos of Damage", "Spare Key"}
+_CURRENCIES = "EGP|USD|EUR|GBP"
+_YEAR = r"(?:19|20)\d{2}"
 
 
-def _first(pattern: str, text: str, flags: int = re.IGNORECASE) -> str | None:
-    match = re.search(pattern, text, flags)
-    value = match.group(1) if match else None
-    return value.strip(" :#") if value else None
+def extract_structured_data(document_type: str, raw_text: str) -> dict:
+    """Conservatively interpret raw text without changing the raw source."""
+    if document_type in VISUAL_EVIDENCE_DOCUMENT_TYPES:
+        return {"visual_evidence_preserved": True}
+    parser = STRUCTURED_EXTRACTORS.get(document_type)
+    if parser is None or not raw_text or not raw_text.strip():
+        return {}
+    return parser(_normalise_for_parsing(raw_text))
+
+
+def _normalise_for_parsing(text: str) -> list[str]:
+    """Normalise a parsing copy while preserving its meaningful line boundaries."""
+    text = text.replace("\r\n", "\n").replace("\r", "\n").replace("–", "-").replace("—", "-")
+    return [re.sub(r"[ \t]+", " ", line).strip() for line in text.split("\n") if line.strip()]
+
+
+def _key(value: str) -> str:
+    return re.sub(r"[^a-z0-9]+", " ", value.lower()).strip()
+
+
+def _valid_value(value: str, labels: set[str]) -> bool:
+    candidate = value.strip(" :#-")
+    if not candidate or _key(candidate) in labels:
+        return False
+    # Avoid interpreting document titles, section headings, or table headings as values.
+    forbidden = ("repair estimate", "estimate no", "estimated repair items", "parts (", "labour (", "total (", "damage assessment")
+    return not any(token in candidate.lower() for token in forbidden)
+
+
+def _line_value(lines: list[str], *labels: str) -> str | None:
+    """Support both ``Label: value`` and a safe ``Label``/``value`` layout."""
+    label_keys = {_key(label) for label in labels}
+    for index, line in enumerate(lines):
+        key, separator, value = line.partition(":")
+        if separator and _key(key) in label_keys and _valid_value(value, label_keys):
+            return value.strip()
+        if _key(line) in label_keys and index + 1 < len(lines) and _valid_value(lines[index + 1], label_keys):
+            return lines[index + 1]
+    return None
 
 
 def _date(value: str | None, *, month_first: bool = False) -> str | None:
     if not value:
         return None
-    value = value.strip()
-    for fmt in (("%Y-%m-%d", "%m/%d/%Y", "%m-%d-%Y", "%d/%m/%Y", "%d-%m-%Y") if month_first else ("%Y-%m-%d", "%d/%m/%Y", "%d-%m-%Y", "%m/%d/%Y", "%m-%d-%Y")):
+    formats = ("%Y-%m-%d", "%m/%d/%Y", "%m-%d-%Y", "%d/%m/%Y", "%d-%m-%Y") if month_first else ("%Y-%m-%d", "%d/%m/%Y", "%d-%m-%Y", "%m/%d/%Y", "%m-%d-%Y")
+    for fmt in (*formats, "%d %B %Y", "%d %b %Y", "%B %d, %Y", "%b %d, %Y"):
         try:
-            return datetime.strptime(value, fmt).date().isoformat()
+            return datetime.strptime(value.strip().rstrip("."), fmt).date().isoformat()
         except ValueError:
-            pass
+            continue
     return None
 
 
-def _amount(value: str | None) -> Decimal | None:
+def _labelled_date(lines: list[str], *labels: str, month_first: bool = False) -> str | None:
+    return _date(_line_value(lines, *labels), month_first=month_first)
+
+
+def _amount(value: str | None) -> float | None:
     if not value:
         return None
+    cleaned = re.sub(rf"\b(?:{_CURRENCIES})\b", "", value, flags=re.I).replace(",", "").strip()
+    if not re.fullmatch(r"-?\d+(?:\.\d{1,2})?", cleaned):
+        return None
     try:
-        return Decimal(value.replace(",", ""))
+        return float(Decimal(cleaned))
     except InvalidOperation:
         return None
 
 
-def _labelled_date(text: str, label: str, *, month_first: bool = False) -> str | None:
-    value = _first(rf"(?:{label})\s*(?:date)?\s*[:#-]?\s*(\d{{4}}-\d{{2}}-\d{{2}}|\d{{1,2}}[/-]\d{{1,2}}[/-]\d{{2,4}})", text)
-    return _date(value, month_first=month_first)
+def _currency(lines: list[str]) -> str | None:
+    found = re.search(rf"\b({_CURRENCIES})\b", "\n".join(lines), re.I)
+    return found.group(1).upper() if found else None
 
 
-def _driver_licence(text: str) -> dict:
-    data = {
-        "full_name": _first(r"(?:name|customer)\s*[:#-]?\s*([A-Z][A-Z .'-]{2,})", text),
-        "licence_number": _first(r"(?:licen[cs]e|dl|id)\s*(?:number|no\.?|#)?\s*[:#-]?\s*([A-Z0-9-]{5,})", text),
-        "date_of_birth": _labelled_date(text, r"(?:dob|date of birth|birth date)", month_first=True),
-        "address": _first(r"address\s*[:#-]?\s*([^\n]+)", text),
-        "licence_class": _first(r"(?:class)\s*[:#-]?\s*([A-Z0-9]+)", text),
-        "restrictions": _first(r"restrictions?\s*[:#-]?\s*([^\n]+)", text),
-        "issue_date": _labelled_date(text, r"(?:issue|issued)", month_first=True),
-        "expiry_date": _labelled_date(text, r"(?:expiry|expiration|expires?)", month_first=True),
-        "issuing_authority": _first(r"(?:issuing authority|issuer|state)\s*[:#-]?\s*([^\n]+)", text),
-    }
-    if not data["issuing_authority"]:
-        state = _first(r"\b(South Carolina|North Carolina|Cairo|Egypt)\b", text)
-        data["issuing_authority"] = state.title() if state else None
-    return _without_none(data)
+def _integer(value: str | None) -> int | None:
+    return int(value) if value and value.isdigit() else None
 
 
-def _vehicle_registration(text: str) -> dict:
-    return _without_none({
-        "owner_name": _first(r"(?:owner|registered to)\s*[:#-]?\s*([^\n]+)", text),
-        "registration_number": _first(r"(?:registration|reg\.?)(?: number| no\.?| #)?\s*[:#-]?\s*([A-Z0-9-]{4,})", text),
-        "plate_number": _first(r"(?:plate|licen[cs]e plate)\s*(?:number|no\.?|#)?\s*[:#-]?\s*([A-Z0-9-]{3,})", text),
-        "vehicle_make": _first(r"make\s*[:#-]?\s*([^\n]+)", text),
-        "vehicle_model": _first(r"model\s*[:#-]?\s*([^\n]+)", text),
-        "vehicle_year": _as_int(_first(r"(?:year|model year)\s*[:#-]?\s*((?:19|20)\d{2})", text)),
-        "vin": _first(r"\bVIN\s*[:#-]?\s*([A-HJ-NPR-Z0-9]{11,17})", text),
-        "registration_expiry_date": _labelled_date(text, r"(?:registration )?(?:expiry|expiration|expires?)"),
-    })
+def _empty_repair_estimate() -> dict:
+    return {"garage_name": None, "estimate_number": None, "issued_date": None, "customer_name": None,
+            "vehicle": {"make_model": None, "year": None}, "registration_number": None,
+            "claim_reference": None, "damage_description": None, "repair_items": [],
+            "total_estimated_repair_cost": None, "currency": None, "validity_days": None}
 
 
-def _repair_estimate(text: str) -> dict:
-    currency, total = _currency_amount(text, r"\b(?:grand )?total(?: estimated)?|\btotal estimate")
+def _repair_estimate(lines: list[str]) -> dict:
+    # Do not turn arbitrary OCR fragments into an all-null "estimate" record.
+    recognised = {"garage", "workshop", "repairer", "estimate no", "estimate number", "issued", "issue date", "estimate date", "customer", "vehicle", "registration", "claim reference", "damage assessment", "total estimated repair cost"}
+    if not any(_key(line.partition(":")[0]) in recognised or _key(line) in recognised for line in lines):
+        return {}
+    data = _empty_repair_estimate()
+    first = lines[0] if lines else None
+    data["garage_name"] = _line_value(lines, "garage", "workshop", "repairer")
+    if data["garage_name"] is None and first and not re.search(r"\b(?:vehicle )?(?:repair )?(?:estimate|quotation|invoice)\b", first, re.I):
+        data["garage_name"] = first
+    data["estimate_number"] = _line_value(lines, "estimate no", "estimate no.", "estimate number")
+    data["issued_date"] = _labelled_date(lines, "issued", "issue date", "estimate date")
+    data["customer_name"] = _line_value(lines, "customer", "client")
+    vehicle_value = _line_value(lines, "vehicle")
+    if vehicle_value:
+        vehicle = re.fullmatch(rf"(.+?)\s*-\s*({_YEAR})", vehicle_value)
+        data["vehicle"] = {"make_model": vehicle.group(1).strip() if vehicle else vehicle_value,
+                           "year": int(vehicle.group(2)) if vehicle else None}
+    data["registration_number"] = _line_value(lines, "registration", "registration number", "plate number")
+    data["claim_reference"] = _line_value(lines, "claim reference", "claim number")
+    data["damage_description"] = _section(lines, "damage assessment", "estimated repair items") or _line_value(lines, "damage", "damage description", "description")
+    data["repair_items"] = _repair_items(lines)
+    total = _line_value(lines, "total estimated repair cost", "total estimated", "total estimate") or _inline_total(lines, r"(?:grand )?total(?: estimated(?: repair cost)?)?")
+    data["total_estimated_repair_cost"] = _amount(total)
+    data["currency"] = _currency(lines)
+    valid = re.search(r"\bvalid\s+for\s+(\d+)\s+days?", "\n".join(lines), re.I)
+    data["validity_days"] = int(valid.group(1)) if valid else None
+    return data
+
+
+def _section(lines: list[str], start: str, end: str) -> str | None:
+    start_index = next((i for i, line in enumerate(lines) if _key(line) == _key(start)), None)
+    if start_index is None:
+        return None
+    values: list[str] = []
+    for line in lines[start_index + 1:]:
+        if _key(line) == _key(end) or re.search(r"\b(?:item|parts|labour|total)\b", line, re.I):
+            break
+        values.append(line)
+    return " ".join(values) or None
+
+
+def _repair_items(lines: list[str]) -> list[dict]:
     items = []
-    for line in text.splitlines():
-        match = re.match(r"\s*(?:[-*]|\d+[.)])\s*(.+?)\s+(?:EGP|USD|EUR)\s*([\d,]+(?:\.\d{1,2})?)\s*$", line, re.IGNORECASE)
+    for line in lines:
+        cells = [part.strip() for part in line.split("|")]
+        if len(cells) != 4 or re.search(r"\b(?:item|parts|labour|total)\b", cells[0], re.I):
+            continue
+        amounts = [_amount(cell) for cell in cells[1:]]
+        if cells[0] and all(amount is not None for amount in amounts):
+            items.append({"item": cells[0], "parts_cost": amounts[0], "labour_cost": amounts[1], "total_cost": amounts[2]})
+    return items
+
+
+def _inline_total(lines: list[str], label: str) -> str | None:
+    for line in lines:
+        match = re.search(rf"{label}\s*:?\s*(?:{_CURRENCIES}\s*)?([\d,]+(?:\.\d{{1,2}})?)\b", line, re.I)
         if match:
-            amount = _amount(match.group(2))
-            if amount is not None:
-                items.append({"item": match.group(1).strip(), "cost": float(amount)})
-    data = {
-        "garage_name": _first(r"(?:garage|workshop|repairer)\s*[:#-]?\s*([^\n]+)", text),
-        "estimate_number": _first(r"(?:estimate|quotation)\s*(?:number|no\.?|#)\s*[:#-]?\s*([A-Z0-9-]{3,})", text),
-        "estimate_date": _labelled_date(text, r"(?:estimate|quotation) date"),
-        "customer_name": _first(r"(?:customer|client)\s*[:#-]?\s*([^\n]+)", text),
-        "vehicle": _first(r"vehicle\s*[:#-]?\s*([^\n]+)", text),
-        "vehicle_year": _as_int(_first(r"vehicle year\s*[:#-]?\s*((?:19|20)\d{2})", text)),
-        "registration_number": _first(r"(?:registration|plate)\s*(?:number|no\.?|#)?\s*[:#-]?\s*([A-Z0-9-]{3,})", text),
-        "claim_reference": _first(r"(?:claim reference|claim (?:number|no\.?|#))\s*[:#-]?\s*([A-Z0-9-]{3,})", text),
-        "damage_description": _labelled_list(text, r"(?:damage|description)"),
-        "repair_items": items or None,
-        "total_estimated_cost": float(total) if total is not None else None,
-        "currency": currency,
-    }
-    return _without_none(data)
+            return match.group(1)
+    return None
 
 
-def _invoice(text: str) -> dict:
-    currency, total = _currency_amount(text, r"\b(?:grand )?total(?: amount)?|\bamount due")
-    return _without_none({
-        "provider_name": _first(r"(?:provider|hospital|clinic|pharmacy)\s*[:#-]?\s*([^\n]+)", text),
-        "invoice_number": _first(r"invoice\s*(?:number|no\.?|#)?\s*[:#-]?\s*([A-Z0-9-]{3,})", text),
-        "invoice_date": _labelled_date(text, r"invoice date|date"),
-        "customer_name": _first(r"(?:customer|patient|member)\s*[:#-]?\s*([^\n]+)", text),
-        "subtotal": _decimal_value(_first(r"subtotal\s*[:#-]?\s*(?:EGP|USD|EUR)?\s*([\d,]+(?:\.\d{1,2})?)", text)),
-        "tax": _decimal_value(_first(r"(?:tax|vat)\s*[:#-]?\s*(?:EGP|USD|EUR)?\s*([\d,]+(?:\.\d{1,2})?)", text)),
-        "total_amount": float(total) if total is not None else None,
-        "currency": currency,
-    })
+def _drivers_licence(lines: list[str]) -> dict:
+    authority = _line_value(lines, "issuing authority", "issuer", "state")
+    if authority is None:
+        authority = next((line.title() for line in lines[:2] if re.fullmatch(r"(?:south|north) carolina|egypt|cairo", line, re.I)), None)
+    return {"full_name": _line_value(lines, "name", "full name"), "licence_number": _line_value(lines, "licence number", "license number", "dl number"),
+            "date_of_birth": _labelled_date(lines, "dob", "date of birth", month_first=True), "issue_date": _labelled_date(lines, "issue date", "issued", month_first=True),
+            "expiry_date": _labelled_date(lines, "expiry date", "expiration date", "expires", month_first=True), "vehicle_class": _line_value(lines, "vehicle class", "class"),
+            "issuing_authority": authority, "address": _line_value(lines, "address")}
 
 
-def _medical_report(text: str) -> dict:
-    return _without_none({
-        "patient_name": _first(r"(?:patient|member)\s*(?:name)?\s*[:#-]?\s*([^\n]+)", text),
-        "provider_name": _first(r"(?:provider|hospital|clinic|physician|doctor)\s*[:#-]?\s*([^\n]+)", text),
-        "report_date": _labelled_date(text, r"(?:report )?date"),
-        "diagnosis": _first(r"diagnosis\s*[:#-]?\s*([^\n]+)", text),
-        "treatment": _first(r"treatment\s*[:#-]?\s*([^\n]+)", text),
-        "admission_date": _labelled_date(text, r"admission"),
-        "discharge_date": _labelled_date(text, r"discharge"),
-    })
+def _vehicle_registration(lines: list[str]) -> dict:
+    return {"owner_name": _line_value(lines, "owner", "registered to"), "registration_number": _line_value(lines, "registration number", "registration", "reg number"),
+            "vehicle_make": _line_value(lines, "make"), "vehicle_model": _line_value(lines, "model"), "model_year": _integer(_line_value(lines, "model year", "year")),
+            "vin": _line_value(lines, "vin"), "registration_expiry": _labelled_date(lines, "registration expiry", "registration expiration", "expiry date")}
 
 
-def _police_report(text: str) -> dict:
-    return _without_none({
-        "report_number": _first(r"(?:police )?report\s*(?:number|no\.?|#)?\s*[:#-]?\s*([A-Z0-9-]{3,})", text),
-        "incident_date": _labelled_date(text, r"(?:incident|accident) date"),
-        "incident_location": _first(r"(?:incident|accident) location\s*[:#-]?\s*([^\n]+)", text),
-        "reporting_authority": _first(r"(?:reporting authority|police station|authority)\s*[:#-]?\s*([^\n]+)", text),
-        "involved_parties": _labelled_list(text, r"(?:involved parties|parties)"),
-        "vehicle_information": _first(r"vehicle\s*[:#-]?\s*([^\n]+)", text),
-    })
+def _invoice(lines: list[str]) -> dict:
+    return {"provider_name": _line_value(lines, "provider", "hospital", "clinic", "pharmacy"), "invoice_number": _line_value(lines, "invoice number", "invoice no", "invoice no."),
+            "invoice_date": _labelled_date(lines, "invoice date", "date"), "customer_name": _line_value(lines, "customer", "patient", "member"),
+            "subtotal": _amount(_line_value(lines, "subtotal")), "tax": _amount(_line_value(lines, "tax", "vat")),
+            "total_amount": _amount(_line_value(lines, "total amount", "amount due", "grand total") or _inline_total(lines, r"(?:grand )?total(?: amount)?|amount due")), "currency": _currency(lines)}
 
 
-def _member_id(text: str) -> dict:
-    return _without_none({
-        "member_name": _first(r"(?:member|name)\s*(?:name)?\s*[:#-]?\s*([^\n]+)", text),
-        "member_id": _first(r"member\s*(?:id|number|no\.?|#)\s*[:#-]?\s*([A-Z0-9-]{3,})", text),
-        "policy_number": _first(r"policy\s*(?:number|no\.?|#)?\s*[:#-]?\s*([A-Z0-9-]{3,})", text),
-        "expiry_date": _labelled_date(text, r"(?:expiry|expiration|expires?)"),
-    })
+def _medical_report(lines: list[str]) -> dict:
+    return {"patient_name": _line_value(lines, "patient", "patient name", "member"), "provider_name": _line_value(lines, "provider", "hospital", "clinic", "physician", "doctor"),
+            "report_date": _labelled_date(lines, "report date", "date"), "diagnosis": _line_value(lines, "diagnosis"), "treatment": _line_value(lines, "treatment"),
+            "admission_date": _labelled_date(lines, "admission date"), "discharge_date": _labelled_date(lines, "discharge date")}
 
 
-def _currency_amount(text: str, label: str) -> tuple[str | None, Decimal | None]:
-    match = re.search(rf"(?:{label})\s*[:#-]?\s*(EGP|USD|EUR)?\s*([\d,]+(?:\.\d{{1,2}})?)", text, re.IGNORECASE)
-    return ((match.group(1).upper() if match and match.group(1) else None), _amount(match.group(2)) if match else None)
+def _police_report(lines: list[str]) -> dict:
+    return {"report_number": _line_value(lines, "report number", "report no", "police report number"), "incident_date": _labelled_date(lines, "incident date", "accident date"),
+            "incident_location": _line_value(lines, "incident location", "accident location"), "reporting_authority": _line_value(lines, "reporting authority", "police station", "authority"),
+            "involved_parties": _split_list(_line_value(lines, "involved parties", "parties")), "vehicle_information": _line_value(lines, "vehicle", "vehicle information")}
 
 
-def _labelled_list(text: str, label: str) -> list[str] | None:
-    value = _first(rf"{label}\s*[:#-]?\s*([^\n]+)", text)
-    return [item.strip() for item in re.split(r";|,", value) if item.strip()] if value else None
+def _member_id(lines: list[str]) -> dict:
+    return {"member_name": _line_value(lines, "member name", "name"), "member_id": _line_value(lines, "member id", "member number"),
+            "policy_number": _line_value(lines, "policy number", "policy no"), "expiry_date": _labelled_date(lines, "expiry", "expiry date", "expiration date")}
 
 
-def _as_int(value: str | None) -> int | None:
-    return int(value) if value else None
+def _simple_document(lines: list[str], schema: dict[str, tuple[str, ...]]) -> dict:
+    return {field: (_labelled_date(lines, *labels) if field.endswith("_date") else _line_value(lines, *labels)) for field, labels in schema.items()}
 
 
-def _decimal_value(value: str | None) -> float | None:
-    amount = _amount(value)
-    return float(amount) if amount is not None else None
+def _split_list(value: str | None) -> list[str] | None:
+    return [item.strip() for item in re.split(r"[,;]", value) if item.strip()] if value else None
 
 
-def _without_none(data: dict) -> dict:
-    return {key: value for key, value in data.items() if value is not None}
+def _fire_brigade_report(lines: list[str]) -> dict:
+    return _simple_document(lines, {"report_number": ("report number", "report no"), "incident_date": ("incident date", "date"), "location": ("location", "incident location"), "station": ("station", "fire station")})
 
 
-STRUCTURED_EXTRACTORS: dict[str, Callable[[str], dict]] = {
-    "Driver's Licence": _driver_licence,
-    "Vehicle Registration": _vehicle_registration,
-    "Repair Estimate": _repair_estimate,
-    "Itemised Hospital Invoice": _invoice,
-    "Itemised Invoice": _invoice,
-    "Pharmacy Invoice": _invoice,
-    "Itemised Invoices": _invoice,
-    "Medical Report": _medical_report,
-    "Physician Report": _medical_report,
-    "Police Report": _police_report,
-    "Police Theft Report": _police_report,
-    "Police Report (Forced Entry)": _police_report,
-    "Member ID": _member_id,
+def _itemised_list(lines: list[str]) -> dict:
+    return _simple_document(lines, {"list_reference": ("list reference", "reference"), "owner_name": ("owner", "customer"), "total_value": ("total value", "total")})
+
+
+def _quotation(lines: list[str]) -> dict:
+    return _simple_document(lines, {"supplier_name": ("supplier", "contractor", "provider"), "quotation_number": ("quotation number", "quote number"), "quotation_date": ("quotation date", "date"), "total_amount": ("total amount", "total")}) | {"currency": _currency(lines)}
+
+
+def _prescription(lines: list[str]) -> dict:
+    return _simple_document(lines, {"patient_name": ("patient", "patient name"), "prescriber_name": ("prescriber", "doctor", "physician"), "prescription_date": ("prescription date", "date"), "prescription_number": ("prescription number", "rx number")})
+
+
+def _proof_of_ownership(lines: list[str]) -> dict:
+    return _simple_document(lines, {"owner_name": ("owner", "purchaser"), "item_description": ("item", "description"), "purchase_date": ("purchase date", "date"), "proof_reference": ("receipt number", "reference")})
+
+
+def _airline_report(lines: list[str]) -> dict:
+    return _simple_document(lines, {"report_reference": ("pir number", "report number", "reference"), "passenger_name": ("passenger", "passenger name"), "flight_number": ("flight number", "flight"), "report_date": ("report date", "date"), "baggage_reference": ("baggage tag", "baggage reference")})
+
+
+def _official_notice(lines: list[str]) -> dict:
+    return _simple_document(lines, {"issuing_authority": ("issuing authority", "authority"), "notice_reference": ("notice number", "reference"), "issued_date": ("issued date", "date"), "subject": ("subject",)})
+
+
+STRUCTURED_EXTRACTORS: dict[str, Callable[[list[str]], dict]] = {
+    "Repair Estimate": _repair_estimate, "Driver's Licence": _drivers_licence, "Vehicle Registration": _vehicle_registration,
+    "Garage Invoice": _invoice, "Itemised Hospital Invoice": _invoice, "Itemised Invoice": _invoice, "Pharmacy Invoice": _invoice, "Itemised Invoices": _invoice, "Receipts for Essentials": _invoice,
+    "Medical Report": _medical_report, "Medical Certificate": _medical_report, "Physician Report": _medical_report, "Police Report": _police_report, "Police Theft Report": _police_report, "Police Report (Forced Entry)": _police_report,
+    "Member ID": _member_id, "Fire Brigade Report": _fire_brigade_report, "Itemised List": _itemised_list, "Repair / Replacement Quotations": _quotation, "Prescription": _prescription,
+    "Proof of Ownership": _proof_of_ownership, "Receipts / Proof of Ownership": _proof_of_ownership, "Receipt": _invoice, "Airline PIR": _airline_report, "Airline Report": _airline_report, "Airline PIR or Police Report": _airline_report, "Airline Property Irregularity Report": _airline_report,
+    "Plumber Report": lambda lines: _simple_document(lines, {"report_number": ("report number", "reference"), "inspection_date": ("inspection date", "date"), "plumber_name": ("plumber", "provider"), "findings": ("findings", "damage")}),
+    "Referring Physician Request": lambda lines: _simple_document(lines, {"patient_name": ("patient", "member"), "physician_name": ("physician", "doctor"), "request_date": ("request date", "date"), "requested_service": ("requested service", "service", "procedure")}),
+    "Proof of Covered Reason": lambda lines: _simple_document(lines, {"reason": ("reason", "covered reason"), "issued_date": ("issued date", "date"), "issuing_authority": ("issuing authority", "authority")}),
+    "Embassy / Consulate Statement": lambda lines: _simple_document(lines, {"issuing_authority": ("embassy", "consulate", "authority"), "statement_date": ("statement date", "date"), "reference": ("reference", "statement number")}),
+    "Official Notice": _official_notice, "Death Certificate": _official_notice,
 }

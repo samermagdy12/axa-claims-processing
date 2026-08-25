@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { AppState, Screen } from './types';
+import type { AppState, Role, Screen } from './types';
 import { Layout } from './components/Layout';
 
 // Auth
@@ -46,9 +46,11 @@ export default function App() {
   };
 
   const signIn = (session: { access_token: string; user: { user_id: string; full_name: string; email: string; role: string } }) => {
+    const role = session.user.role.toLowerCase() as Role;
+    const homeScreen: Screen = role === 'customer' ? 'customer-home' : role === 'assessor' ? 'assessor-queue' : 'operations';
     localStorage.setItem('axa_access_token', session.access_token);
     setToken(session.access_token);
-    setAppState({ screen: 'customer-home', role: 'customer', userId: session.user.user_id, userName: session.user.full_name });
+    setAppState({ screen: homeScreen, role, userId: session.user.user_id, userName: session.user.full_name });
   };
 
   const signOut = () => { localStorage.removeItem('axa_access_token'); setToken(null); setAppState(INITIAL_STATE); };

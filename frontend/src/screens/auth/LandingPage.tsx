@@ -51,8 +51,8 @@ const DEMO_ROLES: {
 ];
 
 export default function LandingPage({ onSignIn, onGoSignUp }: LandingPageProps) {
-  const [email, setEmail] = useState('ahmed.hassan@email.com');
-  const [password, setPassword] = useState('demo');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [selectedRole, setSelectedRole] = useState<Role>('customer');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -157,8 +157,8 @@ export default function LandingPage({ onSignIn, onGoSignUp }: LandingPageProps) 
             <p className="text-sm text-gray-500 mt-1">Access your claims platform account.</p>
           </div>
 
-          {/* Demo role selector */}
-          <div className="mb-6">
+          {/* The backend, not this form, resolves the authenticated user's role. */}
+          {false && (<div className="mb-6">
             <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Select demo role</p>
             <div className="grid grid-cols-3 gap-2">
               {DEMO_ROLES.map(r => (
@@ -177,8 +177,7 @@ export default function LandingPage({ onSignIn, onGoSignUp }: LandingPageProps) 
                 </button>
               ))}
             </div>
-          </div>
-
+          </div>)}
           <form onSubmit={handleSubmit} className="space-y-4">
             <Input
               label="Email address"
@@ -196,7 +195,6 @@ export default function LandingPage({ onSignIn, onGoSignUp }: LandingPageProps) 
                 onChange={e => { setPassword(e.target.value); setError(''); }}
                 placeholder="Enter your password"
               />
-              <p className="text-xs text-gray-400 mt-1">Demo password: <span className="font-mono">demo</span></p>
             </div>
 
             {error && <Alert variant="error">{error}</Alert>}

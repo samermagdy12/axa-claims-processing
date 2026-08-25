@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from app.auth import create_access_token, get_current_user, hash_password, verify_password
+from app.auth import ASSESSOR_ROLE, CUSTOMER_ROLE, OPERATIONS_ROLE, create_access_token, get_current_user, hash_password, require_roles, verify_password
 from app.claim_requirements import get_required_documents
 from app.config import settings
 from app.database import get_db
@@ -77,7 +77,7 @@ def register(payload: RegisterRequest, db: Session = Depends(get_db)):
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Email or national ID is already registered")
     if not get_policies_for_national_id(payload.national_id, db):
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="No policies were found for this National ID")
-    customer_role = db.execute(text("SELECT role_id FROM roles WHERE role_name = 'Customer'")).mappings().first()
+    customer_role = db.execute(text("SELECT role_id FROM roles WHERE role_name = :role_name"), {"role_name": CUSTOMER_ROLE}).mappings().first()
     if customer_role is None:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Customer role is not configured")
     try:
@@ -90,7 +90,7 @@ def register(payload: RegisterRequest, db: Session = Depends(get_db)):
     except Exception:
         db.rollback()
         raise
-    return {"access_token": create_access_token(user["user_id"]), "user": {**dict(user), "role": "Customer"}}
+    return {"access_token": create_access_token(user["user_id"]), "user": {**dict(user), "role": CUSTOMER_ROLE}}
 
 
 @app.post("/auth/login", response_model=AuthResponse)
@@ -102,13 +102,13 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)):
 
 
 @app.get("/policies/my", response_model=list[PolicyResponse])
-def get_my_policies(current_user: dict = Depends(get_current_user), db: Session = Depends(get_db)):
+def get_my_policies(current_user: dict = Depends(require_roles(CUSTOMER_ROLE)), db: Session = Depends(get_db)):
     policies = db.execute(text("SELECT policy_id, policy_number, product_line, status, start_date, end_date, annual_limit, remaining_limit, deductible, riders FROM policies WHERE user_id = :user_id ORDER BY start_date DESC, policy_number"), {"user_id": current_user["user_id"]}).mappings().all()
     return [serialize_policy(dict(policy)) for policy in policies]
 
 
 @app.get("/policies/{policy_id}", response_model=PolicyResponse)
-def get_policy(policy_id: str, current_user: dict = Depends(get_current_user), db: Session = Depends(get_db)):
+def get_policy(policy_id: str, current_user: dict = Depends(require_roles(CUSTOMER_ROLE)), db: Session = Depends(get_db)):
     policy = db.execute(text("SELECT policy_id, policy_number, product_line, status, start_date, end_date, annual_limit, remaining_limit, deductible, riders FROM policies WHERE policy_id = :policy_id AND user_id = :user_id"), {"policy_id": policy_id, "user_id": current_user["user_id"]}).mappings().first()
     if policy is None:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You do not have access to this policy")
@@ -116,7 +116,7 @@ def get_policy(policy_id: str, current_user: dict = Depends(get_current_user), d
 
 
 @app.get("/claims/my", response_model=list[CustomerClaimResponse])
-def get_my_claims(current_user: dict = Depends(get_current_user), db: Session = Depends(get_db)):
+def get_my_claims(current_user: dict = Depends(require_roles(CUSTOMER_ROLE)), db: Session = Depends(get_db)):
     claims = db.execute(
         text("""
             SELECT c.claim_id, c.policy_id, p.policy_number, p.product_line,
@@ -133,7 +133,7 @@ def get_my_claims(current_user: dict = Depends(get_current_user), db: Session = 
 
 
 @app.get("/claims/{claim_id}", response_model=CustomerClaimResponse)
-def get_claim(claim_id: str, current_user: dict = Depends(get_current_user), db: Session = Depends(get_db)):
+def get_claim(claim_id: str, current_user: dict = Depends(require_roles(CUSTOMER_ROLE)), db: Session = Depends(get_db)):
     claim = db.execute(
         text("""
             SELECT c.claim_id, c.policy_id, p.policy_number, p.product_line,
@@ -175,7 +175,7 @@ async def upload_claim_document(
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    if current_user["role_name"] != "Customer":
+    if current_user["role_name"] != CUSTOMER_ROLE:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only customers can upload claim documents")
     safe_file_name = Path(file.filename or "").name
     if safe_file_name in {"", ".", ".."}:
@@ -249,7 +249,7 @@ def extract_claim_document(
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    if current_user["role_name"] != "Customer":
+    if current_user["role_name"] != CUSTOMER_ROLE:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only customers can process claim documents")
     claim = db.execute(
         text("SELECT c.claim_id, p.user_id FROM claims c JOIN policies p ON p.policy_id = c.policy_id WHERE c.claim_id = :claim_id"),
@@ -328,7 +328,7 @@ def _document_extraction_response(extraction: dict, reused: bool) -> dict:
 
 @app.post("/claims", response_model=ClaimCreateResponse, status_code=status.HTTP_201_CREATED)
 def create_claim(payload: ClaimCreateRequest, current_user: dict = Depends(get_current_user), db: Session = Depends(get_db)):
-    if current_user["role_name"] != "Customer":
+    if current_user["role_name"] != CUSTOMER_ROLE:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only customers can create claims")
 
     policy = db.execute(
@@ -370,3 +370,15 @@ def create_claim(payload: ClaimCreateRequest, current_user: dict = Depends(get_c
         raise
 
     return {**dict(claim), "required_documents": required_documents}
+
+
+@app.get("/internal/assessor")
+def assessor_area(current_user: dict = Depends(require_roles(ASSESSOR_ROLE))):
+    """Minimal protected entry point for future assessor review workflows."""
+    return {"role": current_user["role_name"], "message": "Assessor access granted"}
+
+
+@app.get("/internal/operations")
+def operations_area(current_user: dict = Depends(require_roles(OPERATIONS_ROLE))):
+    """Minimal protected entry point for future operations workflows."""
+    return {"role": current_user["role_name"], "message": "Operations access granted"}

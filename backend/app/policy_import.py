@@ -5,6 +5,8 @@ from pathlib import Path
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+from app.auth import CUSTOMER_ROLE
+
 
 DEFAULT_POLICY_SOURCE = Path(__file__).resolve().parents[2] / "data" / "AXA_capstone_data" / "policies.json"
 IMPORTED_EMAIL_DOMAIN = "policy-import.local"
@@ -24,7 +26,7 @@ def load_source_policies(source_path: Path = DEFAULT_POLICY_SOURCE) -> list[dict
 
 def import_policies(db: Session, source_path: Path = DEFAULT_POLICY_SOURCE) -> ImportResult:
     source_policies = load_source_policies(source_path)
-    customer_role = db.execute(text("SELECT role_id FROM roles WHERE role_name = 'Customer'")).mappings().first()
+    customer_role = db.execute(text("SELECT role_id FROM roles WHERE role_name = :role_name"), {"role_name": CUSTOMER_ROLE}).mappings().first()
     if customer_role is None:
         raise RuntimeError("Customer role is not configured")
 

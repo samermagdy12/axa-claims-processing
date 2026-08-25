@@ -6,6 +6,7 @@ from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
 
 class RegisterRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     full_name: str = Field(min_length=1, max_length=150)
     email: EmailStr
     password: str = Field(min_length=8)

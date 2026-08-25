@@ -14,6 +14,10 @@ from app.database import get_db
 
 bearer_scheme = HTTPBearer(auto_error=False)
 
+CUSTOMER_ROLE = "Customer"
+ASSESSOR_ROLE = "Assessor"
+OPERATIONS_ROLE = "Operations"
+
 
 def hash_password(password: str) -> str:
     return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
@@ -48,3 +52,14 @@ def get_current_user(
     if user is None or user["status"] != "active":
         raise unauthorized
     return dict(user)
+
+
+def require_roles(*allowed_roles: str):
+    """Return a dependency that authorizes roles resolved from the database."""
+
+    def authorize(current_user: Annotated[dict, Depends(get_current_user)]) -> dict:
+        if current_user["role_name"] not in allowed_roles:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You do not have permission to access this resource")
+        return current_user
+
+    return authorize

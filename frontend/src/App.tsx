@@ -53,12 +53,12 @@ export default function App() {
     const homeScreen: Screen = role === 'customer' ? 'customer-home' : role === 'assessor' ? 'assessor-queue' : 'operations';
     localStorage.setItem('axa_access_token', session.access_token);
     setToken(session.access_token);
-    setAppState({ screen: homeScreen, role, userId: session.user.user_id, userName: session.user.full_name });
+    setAppState({ screen: homeScreen, role, userId: session.user.user_id, userName: session.user.full_name, userEmail: session.user.email });
   };
 
   const signOut = () => { localStorage.removeItem('axa_access_token'); setToken(null); setAppState(INITIAL_STATE); };
 
-  const { screen, role, userName, selectedPolicyId, selectedClaimId, selectedAssessorClaimId } =
+  const { screen, role, userName, userEmail, selectedPolicyId, selectedClaimId, selectedAssessorClaimId } =
     appState;
 
   // ── Auth screens (no layout) ────────────────────────────────────────────────
@@ -105,20 +105,20 @@ export default function App() {
       {role === 'customer' && (
         <>
           {screen === 'customer-home' && (
-            <CustomerHome userName={userName || 'Customer'} navigate={navigate} />
+            <CustomerHome userName={userName || 'Customer'} token={token || ''} navigate={navigate} />
           )}
           {screen === 'my-policies' && <MyPolicies navigate={navigate} token={token || ''} />}
           {screen === 'policy-details' && (
-            <PolicyDetails policyId={selectedPolicyId || ''} navigate={navigate} />
+            <PolicyDetails policyId={selectedPolicyId || ''} token={token || ''} navigate={navigate} />
           )}
-          {screen === 'my-claims' && <MyClaims navigate={navigate} />}
+          {screen === 'my-claims' && <MyClaims navigate={navigate} token={token || ''} />}
           {screen === 'new-claim' && (
             <NewClaim preselectedPolicyId={selectedPolicyId} token={token || ''} navigate={navigate} />
           )}
           {screen === 'claim-details' && (
-            <ClaimDetails claimId={selectedClaimId || 'clm-001'} navigate={navigate} />
+            <ClaimDetails claimId={selectedClaimId || ''} token={token || ''} navigate={navigate} />
           )}
-          {screen === 'profile' && <Profile userName={userName || 'Customer'} />}
+          {screen === 'profile' && <Profile userName={userName || 'Customer'} userEmail={userEmail || ''} token={token || ''} />}
         </>
       )}
 

@@ -1,15 +1,17 @@
-import { Card, Button, ClaimStatusBadge, PolicyStatusBadge, ProductBadge, Amount, ProgressBar, EmptyState, Alert } from '../../components/UI';
-import { CUSTOMER_POLICIES, CUSTOMER_CLAIMS } from '../../data';
+import { Card, Button, ClaimStatusBadge, PolicyStatusBadge, ProductBadge, Amount, ProgressBar, EmptyState, Alert, Spinner } from '../../components/UI';
+import { useCustomerData } from '../../hooks/useCustomerData';
 import type { Screen } from '../../types';
 
 interface CustomerHomeProps {
   userName: string;
+  token: string;
   navigate: (screen: Screen, params?: Record<string, string>) => void;
 }
 
-export default function CustomerHome({ userName, navigate }: CustomerHomeProps) {
-  const activePolicies = CUSTOMER_POLICIES.filter(p => p.status === 'ACTIVE');
-  const recentClaims = CUSTOMER_CLAIMS.slice(0, 4);
+export default function CustomerHome({ userName, token, navigate }: CustomerHomeProps) {
+  const { policies, claims, loading, error } = useCustomerData(token);
+  const activePolicies = policies.filter(p => p.status === 'ACTIVE');
+  const recentClaims = claims.slice(0, 4);
   const firstName = userName.split(' ')[0];
 
   return (
@@ -22,7 +24,7 @@ export default function CustomerHome({ userName, navigate }: CustomerHomeProps) 
             {firstName}
           </h1>
           <p className="text-white/60 text-sm mt-1">
-            {activePolicies.length} active {activePolicies.length === 1 ? 'policy' : 'policies'} · {CUSTOMER_CLAIMS.length} claims
+            {activePolicies.length} active {activePolicies.length === 1 ? 'policy' : 'policies'} · {claims.length} claims
           </p>
         </div>
         <Button
@@ -41,8 +43,9 @@ export default function CustomerHome({ userName, navigate }: CustomerHomeProps) 
             <button onClick={() => navigate('my-policies')} className="text-sm text-axa-blue hover:underline">View all</button>
           </div>
 
+          {loading ? <Card className="p-6 flex justify-center"><Spinner /></Card> : error ? <Alert variant="error">{error}</Alert> : policies.length === 0 ? <Card><EmptyState icon="📄" title="No policies found" description="There are no policies associated with your account." /></Card> : (
           <div className="space-y-3">
-            {CUSTOMER_POLICIES.map(policy => {
+            {policies.map(policy => {
               const usedPct = ((policy.annualLimit - policy.remainingLimit) / policy.annualLimit) * 100;
               const isInactive = policy.status !== 'ACTIVE';
               return (
@@ -100,7 +103,7 @@ export default function CustomerHome({ userName, navigate }: CustomerHomeProps) 
                 </Card>
               );
             })}
-          </div>
+          </div>)}
         </div>
 
         {/* Claims column */}
@@ -110,7 +113,7 @@ export default function CustomerHome({ userName, navigate }: CustomerHomeProps) 
             <button onClick={() => navigate('my-claims')} className="text-sm text-axa-blue hover:underline">View all</button>
           </div>
 
-          {recentClaims.length === 0 ? ( // empty state
+          {loading ? <Card className="p-6 flex justify-center"><Spinner /></Card> : error ? <Alert variant="error">{error}</Alert> : recentClaims.length === 0 ? (
             <Card>
               <EmptyState icon="📋" title="No claims yet" description="Create your first claim when you need to." />
             </Card>
@@ -157,10 +160,10 @@ export default function CustomerHome({ userName, navigate }: CustomerHomeProps) 
             <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Summary</p>
             <div className="space-y-2">
               {[
-                { label: 'Total claims', value: CUSTOMER_CLAIMS.length },
-                { label: 'Approved', value: CUSTOMER_CLAIMS.filter(c => c.status === 'APPROVED').length },
-                { label: 'Processing', value: CUSTOMER_CLAIMS.filter(c => c.status === 'PROCESSING').length },
-                { label: 'Pending docs', value: CUSTOMER_CLAIMS.filter(c => c.status === 'WAITING_FOR_DOCUMENTS').length },
+                { label: 'Total claims', value: claims.length },
+                { label: 'Approved', value: claims.filter(c => c.status === 'APPROVED').length },
+                { label: 'Processing', value: claims.filter(c => c.status === 'PROCESSING').length },
+                { label: 'Pending docs', value: claims.filter(c => c.status === 'WAITING_FOR_DOCUMENTS').length },
               ].map(({ label, value }) => (
                 <div key={label} className="flex justify-between items-center">
                   <span className="text-xs text-gray-500">{label}</span>

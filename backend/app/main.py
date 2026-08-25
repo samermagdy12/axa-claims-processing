@@ -7,7 +7,7 @@ from app.auth import create_access_token, get_current_user, hash_password, verif
 from app.claim_requirements import get_required_documents
 from app.config import settings
 from app.database import get_db
-from app.schemas import AuthResponse, ClaimCreateRequest, ClaimCreateResponse, LoginRequest, PolicyResponse, PolicyVerificationRequest, RegisterRequest
+from app.schemas import AuthResponse, ClaimCreateRequest, ClaimCreateResponse, CustomerClaimResponse, LoginRequest, PolicyResponse, PolicyVerificationRequest, RegisterRequest
 
 
 app = FastAPI(
@@ -108,6 +108,50 @@ def get_policy(policy_id: str, current_user: dict = Depends(get_current_user), d
     if policy is None:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You do not have access to this policy")
     return serialize_policy(dict(policy))
+
+
+@app.get("/claims/my", response_model=list[CustomerClaimResponse])
+def get_my_claims(current_user: dict = Depends(get_current_user), db: Session = Depends(get_db)):
+    claims = db.execute(
+        text("""
+            SELECT c.claim_id, c.policy_id, p.policy_number, p.product_line,
+                   c.claim_type, c.incident_date, c.submission_date,
+                   c.claimed_amount, c.description, c.status
+            FROM claims c
+            JOIN policies p ON p.policy_id = c.policy_id
+            WHERE p.user_id = :user_id
+            ORDER BY c.submission_date DESC, c.created_at DESC
+        """),
+        {"user_id": current_user["user_id"]},
+    ).mappings().all()
+    return [dict(claim) for claim in claims]
+
+
+@app.get("/claims/{claim_id}", response_model=CustomerClaimResponse)
+def get_claim(claim_id: str, current_user: dict = Depends(get_current_user), db: Session = Depends(get_db)):
+    claim = db.execute(
+        text("""
+            SELECT c.claim_id, c.policy_id, p.policy_number, p.product_line,
+                   c.claim_type, c.incident_date, c.submission_date,
+                   c.claimed_amount, c.description, c.status
+            FROM claims c
+            JOIN policies p ON p.policy_id = c.policy_id
+            WHERE c.claim_id = :claim_id AND p.user_id = :user_id
+        """),
+        {"claim_id": claim_id, "user_id": current_user["user_id"]},
+    ).mappings().first()
+    if claim is None:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You do not have access to this claim")
+    required_documents = db.execute(
+        text("""
+            SELECT claim_required_document_id, document_type, is_required, status
+            FROM claim_required_documents
+            WHERE claim_id = :claim_id
+            ORDER BY created_at, document_type
+        """),
+        {"claim_id": claim_id},
+    ).mappings().all()
+    return {**dict(claim), "required_documents": [dict(document) for document in required_documents]}
 
 
 @app.post("/claims", response_model=ClaimCreateResponse, status_code=status.HTTP_201_CREATED)

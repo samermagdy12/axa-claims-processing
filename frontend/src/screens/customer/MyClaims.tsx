@@ -1,10 +1,11 @@
 import { useState } from 'react';
-import { Card, Button, ClaimStatusBadge, ProductBadge, PageHeader, Amount, EmptyState, Alert } from '../../components/UI';
-import { CUSTOMER_CLAIMS } from '../../data';
+import { Card, Button, ClaimStatusBadge, ProductBadge, PageHeader, Amount, EmptyState, Alert, Spinner } from '../../components/UI';
+import { useCustomerData } from '../../hooks/useCustomerData';
 import type { Screen, ClaimStatus } from '../../types';
 
 interface MyClaimsProps {
   navigate: (screen: Screen, params?: Record<string, string>) => void;
+  token: string;
 }
 
 const STATUS_FILTERS: { label: string; value: ClaimStatus | 'ALL' }[] = [
@@ -17,18 +18,19 @@ const STATUS_FILTERS: { label: string; value: ClaimStatus | 'ALL' }[] = [
   { label: 'Below Deductible', value: 'BELOW_DEDUCTIBLE' },
 ];
 
-export default function MyClaims({ navigate }: MyClaimsProps) {
+export default function MyClaims({ navigate, token }: MyClaimsProps) {
   const [statusFilter, setStatusFilter] = useState<ClaimStatus | 'ALL'>('ALL');
+  const { claims, loading, error } = useCustomerData(token);
 
   const filtered = statusFilter === 'ALL'
-    ? CUSTOMER_CLAIMS
-    : CUSTOMER_CLAIMS.filter(c => c.status === statusFilter);
+    ? claims
+    : claims.filter(c => c.status === statusFilter);
 
   return (
     <div className="animate-fade-in">
       <PageHeader
         title="My Claims"
-        subtitle={`${CUSTOMER_CLAIMS.length} claims total`}
+        subtitle={`${claims.length} claims total`}
         action={<Button onClick={() => navigate('new-claim')}>+ New Claim</Button>}
       />
 
@@ -47,14 +49,14 @@ export default function MyClaims({ navigate }: MyClaimsProps) {
             {f.label}
             {f.value !== 'ALL' && (
               <span className="ml-1.5 text-[10px]">
-                {CUSTOMER_CLAIMS.filter(c => c.status === f.value).length}
+                {claims.filter(c => c.status === f.value).length}
               </span>
             )}
           </button>
         ))}
       </div>
 
-      {filtered.length === 0 ? (
+      {loading ? <Card className="p-6 flex justify-center"><Spinner /></Card> : error ? <Alert variant="error">{error}</Alert> : filtered.length === 0 ? (
         <Card>
           <EmptyState
             icon="📋"

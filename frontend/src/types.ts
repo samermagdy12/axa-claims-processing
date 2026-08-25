@@ -140,6 +140,7 @@ export interface AppState {
   role: Role | null;
   userId?: string;
   userName?: string;
+  userEmail?: string;
   selectedPolicyId?: string;
   selectedClaimId?: string;
   selectedAssessorClaimId?: string;

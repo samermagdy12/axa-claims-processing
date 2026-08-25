@@ -73,3 +73,17 @@ class ClaimCreateResponse(BaseModel):
     description: str | None
     status: str
     required_documents: list[RequiredDocumentResponse]
+
+
+class CustomerClaimResponse(BaseModel):
+    claim_id: UUID
+    policy_id: str
+    policy_number: str
+    product_line: str
+    claim_type: str
+    incident_date: date
+    submission_date: datetime
+    claimed_amount: Decimal
+    description: str | None
+    status: str
+    required_documents: list[RequiredDocumentResponse] = Field(default_factory=list)

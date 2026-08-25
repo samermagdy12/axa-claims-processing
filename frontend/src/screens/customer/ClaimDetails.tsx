@@ -1,49 +1,42 @@
-import { useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Button, Card, ClaimStatusBadge, ProductBadge, PageHeader, Amount, Alert, DataRow, DocStatusChip, Spinner,
 } from '../../components/UI';
-import { CUSTOMER_CLAIMS } from '../../data';
-import type { Screen } from '../../types';
+import { getClaim } from '../../api';
+import type { Claim, Screen } from '../../types';
 
 interface ClaimDetailsProps {
   claimId: string;
+  token: string;
   navigate: (screen: Screen, params?: Record<string, string>) => void;
 }
 
-export default function ClaimDetails({ claimId, navigate }: ClaimDetailsProps) {
-  const claim = CUSTOMER_CLAIMS.find(c => c.id === claimId);
-  const [uploadingDoc, setUploadingDoc] = useState<string | null>(null);
-  const [uploadedExtras, setUploadedExtras] = useState<Set<string>>(new Set());
-  const fileRef = useRef<HTMLInputElement | null>(null);
-  const [pendingDocName, setPendingDocName] = useState('');
+export default function ClaimDetails({ claimId, token, navigate }: ClaimDetailsProps) {
+  const [claim, setClaim] = useState<Claim | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
+  useEffect(() => {
+    let active = true;
+    setLoading(true);
+    setError('');
+    getClaim(claimId, token)
+      .then(nextClaim => { if (active) setClaim(nextClaim); })
+      .catch(requestError => { if (active) setError(requestError instanceof Error ? requestError.message : 'Unable to load this claim.'); })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, [claimId, token]);
+
+  if (loading) return <div className="p-6 text-gray-500">Loading claim...</div>;
   if (!claim) return (
     <div className="p-6">
-      <Alert variant="error">Claim not found.</Alert>
+      <Alert variant="error">{error || 'Claim not found.'}</Alert>
       <Button variant="ghost" onClick={() => navigate('my-claims')} className="mt-3">← Back</Button>
     </div>
   );
 
-  const handleUploadMissing = (docName: string) => {
-    setPendingDocName(docName);
-    fileRef.current?.click();
-  };
-
-  const handleFileSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file || !pendingDocName) return;
-    setUploadingDoc(pendingDocName);
-    setTimeout(() => {
-      setUploadedExtras(prev => new Set([...prev, pendingDocName]));
-      setUploadingDoc(null);
-    }, 1500);
-    e.target.value = '';
-  };
-
   return (
     <div className="animate-fade-in">
-      <input type="file" ref={fileRef} className="hidden" onChange={handleFileSelected} accept=".pdf,.jpg,.jpeg,.png" />
-
       <PageHeader
         title={`Claim ${claim.id.toUpperCase()}`}
         subtitle={`${claim.claimType} · Submitted ${claim.submissionDate}`}
@@ -55,7 +48,7 @@ export default function ClaimDetails({ claimId, navigate }: ClaimDetailsProps) {
         {/* Main content */}
         <div className="lg:col-span-2 space-y-5">
           {/* Status panel */}
-          <StatusPanel claim={claim} uploadedExtras={uploadedExtras} onUpload={handleUploadMissing} uploadingDoc={uploadingDoc} />
+          <StatusPanel claim={claim} />
 
           {/* Claim details */}
           <Card className="p-5">
@@ -84,14 +77,11 @@ export default function ClaimDetails({ claimId, navigate }: ClaimDetailsProps) {
             <h3 className="text-sm font-semibold text-gray-900 mb-3" style={{ fontFamily: 'var(--font-display)' }}>Documents</h3>
             <div className="space-y-2">
               {claim.documents.map(doc => {
-                const isExtra = uploadedExtras.has(doc.type);
-                const isUploading = uploadingDoc === doc.type;
-                const effectiveStatus = isExtra ? 'UPLOADED' : doc.status;
-
+                const effectiveStatus = doc.status;
                 return (
                   <div key={doc.type} className={`flex items-center gap-3 p-3 rounded-lg border ${
-                    effectiveStatus === 'VERIFIED' ? 'border-emerald-200 bg-emerald-50' :
-                    effectiveStatus === 'UPLOADED' ? 'border-blue-200 bg-blue-50' :
+                    doc.status === 'VERIFIED' ? 'border-emerald-200 bg-emerald-50' :
+                    doc.status === 'UPLOADED' ? 'border-blue-200 bg-blue-50' :
                     'border-amber-200 bg-amber-50'
                   }`}>
                     <div className="text-lg flex-shrink-0">
@@ -102,13 +92,7 @@ export default function ClaimDetails({ claimId, navigate }: ClaimDetailsProps) {
                       {doc.fileName && <p className="text-xs text-gray-500 truncate">📎 {doc.fileName}</p>}
                     </div>
                     <div className="flex items-center gap-2 flex-shrink-0">
-                      {isUploading && <Spinner size="sm" />}
-                      <DocStatusChip status={effectiveStatus} />
-                      {effectiveStatus === 'MISSING' && !isUploading && (
-                        <Button size="sm" onClick={() => handleUploadMissing(doc.type)}>
-                          Upload
-                        </Button>
-                      )}
+                      <DocStatusChip status={doc.status} />
                     </div>
                   </div>
                 );
@@ -148,14 +132,7 @@ export default function ClaimDetails({ claimId, navigate }: ClaimDetailsProps) {
   );
 }
 
-function StatusPanel({ claim, uploadedExtras, onUpload, uploadingDoc }: {
-  claim: ReturnType<typeof CUSTOMER_CLAIMS.find>;
-  uploadedExtras: Set<string>;
-  onUpload: (doc: string) => void;
-  uploadingDoc: string | null;
-}) {
-  if (!claim) return null;
-
+function StatusPanel({ claim }: { claim: Claim }) {
   if (claim.status === 'APPROVED') {
     return (
       <div className="bg-emerald-600 rounded-2xl p-6 text-white">
@@ -207,10 +184,7 @@ function StatusPanel({ claim, uploadedExtras, onUpload, uploadingDoc }: {
   }
 
   if (claim.status === 'WAITING_FOR_DOCUMENTS') {
-    const missingDocs = claim.documents.filter(d => {
-      const isExtra = uploadedExtras.has(d.type);
-      return d.status === 'MISSING' && !isExtra;
-    });
+    const missingDocs = claim.documents.filter(d => d.status === 'MISSING');
 
     if (missingDocs.length === 0) {
       return (
@@ -234,13 +208,7 @@ function StatusPanel({ claim, uploadedExtras, onUpload, uploadingDoc }: {
               {missingDocs.map(doc => (
                 <div key={doc.type} className="flex items-center justify-between bg-white border border-amber-200 rounded-lg px-3 py-2">
                   <span className="text-sm font-semibold text-amber-800">📋 {doc.type}</span>
-                  <Button
-                    size="sm"
-                    loading={uploadingDoc === doc.type}
-                    onClick={() => onUpload(doc.type)}
-                  >
-                    Upload
-                  </Button>
+                  <DocStatusChip status={doc.status} />
                 </div>
               ))}
             </div>
@@ -311,7 +279,7 @@ function StatusPanel({ claim, uploadedExtras, onUpload, uploadingDoc }: {
   return null;
 }
 
-function DecisionCard({ claim }: { claim: NonNullable<ReturnType<typeof CUSTOMER_CLAIMS.find>> }) {
+function DecisionCard({ claim }: { claim: Claim }) {
   if (!claim.decision) return null;
 
   return (

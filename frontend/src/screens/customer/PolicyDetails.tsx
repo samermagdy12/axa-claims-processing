@@ -1,14 +1,18 @@
 import { Button, ProductBadge, PolicyStatusBadge, ClaimStatusBadge, PageHeader, Amount, ProgressBar, Alert, DataRow, Card } from '../../components/UI';
-import { CUSTOMER_POLICIES, CUSTOMER_CLAIMS } from '../../data';
+import { useCustomerData } from '../../hooks/useCustomerData';
 import type { Screen } from '../../types';
 
 interface PolicyDetailsProps {
   policyId: string;
+  token: string;
   navigate: (screen: Screen, params?: Record<string, string>) => void;
 }
 
-export default function PolicyDetails({ policyId, navigate }: PolicyDetailsProps) {
-  const policy = CUSTOMER_POLICIES.find(p => p.id === policyId);
+export default function PolicyDetails({ policyId, token, navigate }: PolicyDetailsProps) {
+  const { policies, claims, loading, error } = useCustomerData(token);
+  const policy = policies.find(p => p.id === policyId);
+  if (loading) return <div className="p-6 text-gray-500">Loading policy…</div>;
+  if (error) return <div className="p-6"><Alert variant="error">{error}</Alert></div>;
   if (!policy) return (
     <div className="p-6">
       <p className="text-red-600">Policy not found.</p>
@@ -16,7 +20,7 @@ export default function PolicyDetails({ policyId, navigate }: PolicyDetailsProps
     </div>
   );
 
-  const claims = CUSTOMER_CLAIMS.filter(c => c.policyId === policyId);
+  const policyClaims = claims.filter(c => c.policyId === policyId);
   const isInactive = policy.status !== 'ACTIVE';
   const usedAmt = policy.annualLimit - policy.remainingLimit;
   const usedPct = policy.annualLimit > 0 ? (usedAmt / policy.annualLimit) * 100 : 0;
@@ -127,13 +131,13 @@ export default function PolicyDetails({ policyId, navigate }: PolicyDetailsProps
           <Card className="p-5">
             <div className="flex items-center justify-between mb-3">
               <h3 className="text-sm font-semibold text-gray-900" style={{ fontFamily: 'var(--font-display)' }}>Claims</h3>
-              <span className="text-xs text-gray-400">{claims.length} total</span>
+              <span className="text-xs text-gray-400">{policyClaims.length} total</span>
             </div>
-            {claims.length === 0 ? (
+            {policyClaims.length === 0 ? (
               <p className="text-sm text-gray-500">No claims on this policy.</p>
             ) : (
               <div className="space-y-2">
-                {claims.map(c => (
+                {policyClaims.map(c => (
                   <button
                     key={c.id}
                     onClick={() => navigate('claim-details', { selectedClaimId: c.id })}

@@ -1,19 +1,22 @@
 import { useState } from 'react';
 import { Card, Button, Input, PageHeader, Alert, DataRow, Amount } from '../../components/UI';
-import { CUSTOMER_POLICIES, CUSTOMER_CLAIMS } from '../../data';
+import { useCustomerData } from '../../hooks/useCustomerData';
 
 interface ProfileProps {
   userName: string;
+  userEmail: string;
+  token: string;
 }
 
-export default function Profile({ userName }: ProfileProps) {
+export default function Profile({ userName, userEmail, token }: ProfileProps) {
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(userName);
   const [saved, setSaved] = useState(false);
 
-  const activePolicies = CUSTOMER_POLICIES.filter(p => p.status === 'ACTIVE');
-  const approvedClaims = CUSTOMER_CLAIMS.filter(c => c.status === 'APPROVED');
-  const totalApproved = approvedClaims.reduce((sum, c) => sum + (c.decision?.approvedAmount ?? 0), 0);
+  const { policies, claims, loading, error } = useCustomerData(token);
+  const activePolicies = policies.filter(p => p.status === 'ACTIVE');
+  const approvedClaims = claims.filter(c => c.status === 'APPROVED');
+  const totalApproved = approvedClaims.reduce((sum, c) => sum + c.claimedAmount, 0);
 
   const handleSave = () => {
     setEditing(false);
@@ -26,6 +29,8 @@ export default function Profile({ userName }: ProfileProps) {
       <PageHeader title="Profile" subtitle="Manage your account and view your policy summary" />
 
       {saved && <Alert variant="success" className="mb-5">Profile updated successfully.</Alert>}
+      {loading && <p className="text-sm text-gray-500 mb-5">Loading your policy and claim summary…</p>}
+      {error && <Alert variant="error" className="mb-5">{error}</Alert>}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Left — account details */}
@@ -41,19 +46,19 @@ export default function Profile({ userName }: ProfileProps) {
             {editing ? (
               <div className="space-y-4">
                 <Input label="Full Name" value={name} onChange={e => setName(e.target.value)} />
-                <Input label="Email Address" type="email" defaultValue="ahmed.hassan@email.com" disabled />
-                <Input label="National ID" defaultValue="2990115230••••" disabled hint="National ID cannot be changed. Contact AXA Egypt to update." />
+                <Input label="Email Address" type="email" defaultValue={userEmail} disabled />
+                <Input label="National ID" defaultValue="On file" disabled hint="National ID cannot be changed. Contact AXA Egypt to update." />
                 <Button onClick={handleSave}>Save Changes</Button>
               </div>
             ) : (
               <>
                 <DataRow label="Full name" value={name} />
-                <DataRow label="Email" value="ahmed.hassan@email.com" />
-                <DataRow label="National ID" value={<span className="font-mono text-xs">2990115230••••</span>} />
+                <DataRow label="Email" value={userEmail} />
+                <DataRow label="National ID" value={<span className="font-mono text-xs">On file</span>} />
                 <DataRow label="Account status" value={
                   <span className="text-xs font-semibold bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded-full">Active</span>
                 } />
-                <DataRow label="Member since" value="January 2023" />
+                <DataRow label="Member since" value="—" />
               </>
             )}
           </Card>
@@ -74,7 +79,7 @@ export default function Profile({ userName }: ProfileProps) {
           <Card className="p-5">
             <h3 className="text-sm font-semibold text-gray-900 mb-4" style={{ fontFamily: 'var(--font-display)' }}>My Policies Summary</h3>
             <div className="space-y-3">
-              {CUSTOMER_POLICIES.map(p => (
+              {policies.map(p => (
                 <div key={p.id} className="flex items-center justify-between py-2 border-b border-gray-100 last:border-0">
                   <div className="flex items-center gap-3">
                     <span className="text-lg">
@@ -115,7 +120,7 @@ export default function Profile({ userName }: ProfileProps) {
             <h3 className="text-sm font-semibold text-gray-900 mb-4" style={{ fontFamily: 'var(--font-display)' }}>Claims Summary</h3>
             <div className="space-y-3">
               {[
-                { label: 'Total claims', value: CUSTOMER_CLAIMS.length },
+                { label: 'Total claims', value: claims.length },
                 { label: 'Approved', value: approvedClaims.length },
                 { label: 'Active policies', value: activePolicies.length },
                 { label: 'Total approved', value: <Amount value={totalApproved} size="sm" /> },

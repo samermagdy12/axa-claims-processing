@@ -20,11 +20,23 @@ export interface CreatedClaim {
   required_documents: { claim_required_document_id: string; document_type: string; is_required: boolean; status: 'MISSING' | 'UPLOADED' | 'VERIFIED' }[];
 }
 
+export interface UploadedClaimDocument {
+  document_id: string;
+  claim_id: string;
+  document_type: string;
+  original_file_name: string;
+  mime_type: string;
+  file_size_bytes: number;
+  uploaded_at: string;
+  required_document: { claim_required_document_id: string; document_type: string; is_required: boolean; status: 'MISSING' | 'UPLOADED' | 'VERIFIED' };
+  claim_status: Claim['status'];
+}
+
 type ApiClaim = {
   claim_id: string; policy_id: string; policy_number: string; product_line: Claim['productLine'];
   claim_type: string; incident_date: string; submission_date: string; claimed_amount: number;
   description: string | null; status: Claim['status'];
-  required_documents?: { document_type: string; status: 'MISSING' | 'UPLOADED' | 'VERIFIED' }[];
+  required_documents?: { document_type: string; status: 'MISSING' | 'UPLOADED' | 'VERIFIED'; original_file_name?: string | null }[];
 };
 
 type ApiPolicy = {
@@ -53,7 +65,7 @@ export async function verifyPolicies(nationalId: string): Promise<Policy[]> {
 export function login(data: { email: string; password: string }) { return request<AuthSession>('/auth/login', { method: 'POST', body: JSON.stringify(data) }); }
 function toPolicy(policy: ApiPolicy): Policy { return { id: policy.policy_id, number: policy.policy_number, productLine: policy.product_line, status: policy.status, startDate: policy.start_date, endDate: policy.end_date, annualLimit: Number(policy.annual_limit), remainingLimit: Number(policy.remaining_limit), deductible: Number(policy.deductible), riders: policy.riders }; }
 function toClaim(claim: ApiClaim): Claim {
-  const documents = (claim.required_documents || []).map(document => ({ type: document.document_type, status: document.status }));
+  const documents = (claim.required_documents || []).map(document => ({ type: document.document_type, status: document.status, fileName: document.original_file_name || undefined }));
   return {
     id: claim.claim_id, policyId: claim.policy_id, policyNumber: claim.policy_number,
     productLine: claim.product_line, claimType: claim.claim_type, incidentDate: claim.incident_date,
@@ -66,6 +78,17 @@ export async function getMyPolicies(token: string): Promise<Policy[]> { return (
 export async function getPolicy(policyId: string, token: string): Promise<Policy> { return toPolicy(await request<ApiPolicy>(`/policies/${encodeURIComponent(policyId)}`, { headers: { Authorization: `Bearer ${token}` } })); }
 export async function getMyClaims(token: string): Promise<Claim[]> { return (await request<ApiClaim[]>('/claims/my', { headers: { Authorization: `Bearer ${token}` } })).map(toClaim); }
 export async function getClaim(claimId: string, token: string): Promise<Claim> { return toClaim(await request<ApiClaim>(`/claims/${encodeURIComponent(claimId)}`, { headers: { Authorization: `Bearer ${token}` } })); }
+export async function uploadClaimDocument(token: string, claimId: string, documentType: string, file: File): Promise<UploadedClaimDocument> {
+  const form = new FormData();
+  form.append('document_type', documentType);
+  form.append('file', file);
+  const response = await fetch(`${API_BASE_URL}/claims/${encodeURIComponent(claimId)}/documents`, { method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: form });
+  if (!response.ok) {
+    const body = await response.json().catch(() => null);
+    throw new Error(body?.detail || 'Unable to upload the document.');
+  }
+  return response.json() as Promise<UploadedClaimDocument>;
+}
 export function createClaim(token: string, data: { policyId: string; claimType: string; incidentDate: string; claimedAmount: number; description: string }) {
   return request<CreatedClaim>('/claims', { method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: JSON.stringify({ policy_id: data.policyId, claim_type: data.claimType, incident_date: data.incidentDate, claimed_amount: data.claimedAmount, description: data.description }) });
 }

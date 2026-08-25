@@ -106,8 +106,8 @@ export default function NewClaim({ preselectedPolicyId, token, navigate }: NewCl
       {step === 2 && createdClaim && <div className="space-y-5">
         <Alert variant="success" title="Claim created">Your claim has been created and is waiting for the required documents.</Alert>
         <Card className="p-5"><h2 className="text-base font-semibold text-gray-900" style={{ fontFamily: 'var(--font-display)' }}>Required Documents</h2><p className="text-sm text-gray-500 mt-1">Claim reference: <span className="font-mono">{createdClaim.claim_id}</span></p><div className="space-y-3 mt-5">{createdClaim.required_documents.map(document => <div key={document.claim_required_document_id} className="flex items-center justify-between border border-gray-200 rounded-lg p-3"><div><p className="text-sm font-semibold text-gray-800">{document.document_type}</p><p className="text-xs text-red-600 mt-1">Required</p></div><DocStatusChip status={document.status} /></div>)}</div></Card>
-        <Alert variant="info">Document upload is the next claim-processing phase. This checklist is saved with your claim and shows exactly what is still missing.</Alert>
-        <div className="flex justify-end"><Button onClick={() => navigate('my-claims', { selectedClaimId: createdClaim.claim_id })}>View My Claims</Button></div>
+        <Alert variant="info">Upload each required document from the claim details page. This checklist is saved with your claim and shows exactly what is still missing.</Alert>
+        <div className="flex justify-end"><Button onClick={() => navigate('claim-details', { selectedClaimId: createdClaim.claim_id })}>Upload Documents</Button></div>
       </div>}
     </div>
   );

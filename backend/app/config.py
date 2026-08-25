@@ -7,6 +7,7 @@ class Settings(BaseSettings):
     JWT_ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
     FRONTEND_ORIGINS: str = "http://localhost:8443,http://127.0.0.1:8443"
+    UPLOAD_DIR: str = "uploads"
 
     model_config = SettingsConfigDict(
         env_file=".env",

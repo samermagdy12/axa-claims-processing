@@ -61,6 +61,7 @@ class RequiredDocumentResponse(BaseModel):
     document_type: str
     is_required: bool
     status: str
+    original_file_name: str | None = None
 
 
 class ClaimCreateResponse(BaseModel):
@@ -87,3 +88,15 @@ class CustomerClaimResponse(BaseModel):
     description: str | None
     status: str
     required_documents: list[RequiredDocumentResponse] = Field(default_factory=list)
+
+
+class ClaimDocumentUploadResponse(BaseModel):
+    document_id: UUID
+    claim_id: UUID
+    document_type: str
+    original_file_name: str
+    mime_type: str
+    file_size_bytes: int
+    uploaded_at: datetime
+    required_document: RequiredDocumentResponse
+    claim_status: str

@@ -1,8 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   Button, Card, ClaimStatusBadge, ProductBadge, PageHeader, Amount, Alert, DataRow, DocStatusChip, Spinner,
 } from '../../components/UI';
-import { getClaim } from '../../api';
+import { getClaim, uploadClaimDocument } from '../../api';
 import type { Claim, Screen } from '../../types';
 
 interface ClaimDetailsProps {
@@ -15,6 +15,10 @@ export default function ClaimDetails({ claimId, token, navigate }: ClaimDetailsP
   const [claim, setClaim] = useState<Claim | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [uploadingDocument, setUploadingDocument] = useState<string | null>(null);
+  const [uploadError, setUploadError] = useState('');
+  const [pendingDocumentType, setPendingDocumentType] = useState('');
+  const fileRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -35,8 +39,32 @@ export default function ClaimDetails({ claimId, token, navigate }: ClaimDetailsP
     </div>
   );
 
+  const chooseDocument = (documentType: string) => {
+    setUploadError('');
+    setPendingDocumentType(documentType);
+    fileRef.current?.click();
+  };
+
+  const uploadSelectedDocument = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file || !pendingDocumentType) return;
+    setUploadingDocument(pendingDocumentType);
+    setUploadError('');
+    try {
+      await uploadClaimDocument(token, claim.id, pendingDocumentType, file);
+      setClaim(await getClaim(claim.id, token));
+    } catch (requestError) {
+      setUploadError(requestError instanceof Error ? requestError.message : 'Unable to upload the document.');
+    } finally {
+      setUploadingDocument(null);
+      setPendingDocumentType('');
+      event.target.value = '';
+    }
+  };
+
   return (
     <div className="animate-fade-in">
+      <input ref={fileRef} type="file" className="hidden" onChange={uploadSelectedDocument} />
       <PageHeader
         title={`Claim ${claim.id.toUpperCase()}`}
         subtitle={`${claim.claimType} · Submitted ${claim.submissionDate}`}
@@ -75,6 +103,7 @@ export default function ClaimDetails({ claimId, token, navigate }: ClaimDetailsP
           {/* Documents */}
           <Card className="p-5">
             <h3 className="text-sm font-semibold text-gray-900 mb-3" style={{ fontFamily: 'var(--font-display)' }}>Documents</h3>
+            {uploadError && <Alert variant="error" className="mb-3">{uploadError}</Alert>}
             <div className="space-y-2">
               {claim.documents.map(doc => {
                 const effectiveStatus = doc.status;
@@ -92,7 +121,11 @@ export default function ClaimDetails({ claimId, token, navigate }: ClaimDetailsP
                       {doc.fileName && <p className="text-xs text-gray-500 truncate">📎 {doc.fileName}</p>}
                     </div>
                     <div className="flex items-center gap-2 flex-shrink-0">
+                      {uploadingDocument === doc.type && <Spinner size="sm" />}
                       <DocStatusChip status={doc.status} />
+                      {doc.status === 'MISSING' && uploadingDocument !== doc.type && (
+                        <Button size="sm" onClick={() => chooseDocument(doc.type)}>Upload</Button>
+                      )}
                     </div>
                   </div>
                 );

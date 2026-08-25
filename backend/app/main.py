@@ -1,4 +1,7 @@
-from fastapi import Depends, FastAPI, HTTPException, status
+import json
+from pathlib import Path
+
+from fastapi import Depends, FastAPI, File, Form, HTTPException, UploadFile, status
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 from sqlalchemy.orm import Session
@@ -7,7 +10,8 @@ from app.auth import create_access_token, get_current_user, hash_password, verif
 from app.claim_requirements import get_required_documents
 from app.config import settings
 from app.database import get_db
-from app.schemas import AuthResponse, ClaimCreateRequest, ClaimCreateResponse, CustomerClaimResponse, LoginRequest, PolicyResponse, PolicyVerificationRequest, RegisterRequest
+from app.document_upload import store_claim_document
+from app.schemas import AuthResponse, ClaimCreateRequest, ClaimCreateResponse, ClaimDocumentUploadResponse, CustomerClaimResponse, LoginRequest, PolicyResponse, PolicyVerificationRequest, RegisterRequest
 
 
 app = FastAPI(
@@ -144,14 +148,97 @@ def get_claim(claim_id: str, current_user: dict = Depends(get_current_user), db:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You do not have access to this claim")
     required_documents = db.execute(
         text("""
-            SELECT claim_required_document_id, document_type, is_required, status
-            FROM claim_required_documents
-            WHERE claim_id = :claim_id
-            ORDER BY created_at, document_type
+            SELECT crd.claim_required_document_id, crd.document_type, crd.is_required, crd.status,
+                   uploaded_document.original_file_name
+            FROM claim_required_documents crd
+            LEFT JOIN LATERAL (
+                SELECT original_file_name
+                FROM claim_documents
+                WHERE claim_id = crd.claim_id AND document_type = crd.document_type
+                ORDER BY uploaded_at DESC
+                LIMIT 1
+            ) uploaded_document ON TRUE
+            WHERE crd.claim_id = :claim_id
+            ORDER BY crd.created_at, crd.document_type
         """),
         {"claim_id": claim_id},
     ).mappings().all()
     return {**dict(claim), "required_documents": [dict(document) for document in required_documents]}
+
+
+@app.post("/claims/{claim_id}/documents", response_model=ClaimDocumentUploadResponse, status_code=status.HTTP_201_CREATED)
+async def upload_claim_document(
+    claim_id: str,
+    document_type: str = Form(...),
+    file: UploadFile = File(...),
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if current_user["role_name"] != "Customer":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only customers can upload claim documents")
+    safe_file_name = Path(file.filename or "").name
+    if safe_file_name in {"", ".", ".."}:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="A file is required")
+    content = await file.read()
+    if not content:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="The uploaded file is empty")
+
+    claim = db.execute(
+        text("SELECT c.claim_id, p.user_id FROM claims c JOIN policies p ON p.policy_id = c.policy_id WHERE c.claim_id = :claim_id"),
+        {"claim_id": claim_id},
+    ).mappings().first()
+    if claim is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Claim not found")
+    if claim["user_id"] != current_user["user_id"]:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You do not have access to this claim")
+
+    required_document = db.execute(
+        text("SELECT claim_required_document_id, document_type, is_required, status FROM claim_required_documents WHERE claim_id = :claim_id AND document_type = :document_type AND is_required = TRUE"),
+        {"claim_id": claim_id, "document_type": document_type},
+    ).mappings().first()
+    if required_document is None:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="This document is not required for the claim")
+    if required_document["status"] != "MISSING":
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="This required document has already been uploaded")
+
+    destination = None
+    try:
+        destination, document_url = store_claim_document(settings.UPLOAD_DIR, claim["claim_id"], safe_file_name, content)
+        uploaded_document = db.execute(
+            text("""
+                INSERT INTO claim_documents (claim_id, document_type, document_url, original_file_name, mime_type, file_size_bytes, uploaded_by)
+                VALUES (:claim_id, :document_type, :document_url, :original_file_name, :mime_type, :file_size_bytes, :uploaded_by)
+                RETURNING document_id, claim_id, document_type, original_file_name, mime_type, file_size_bytes, uploaded_at
+            """),
+            {"claim_id": claim_id, "document_type": document_type, "document_url": document_url, "original_file_name": safe_file_name, "mime_type": file.content_type or "application/octet-stream", "file_size_bytes": len(content), "uploaded_by": current_user["user_id"]},
+        ).mappings().one()
+        required_document = db.execute(
+            text("""
+                UPDATE claim_required_documents SET status = 'UPLOADED', updated_at = CURRENT_TIMESTAMP
+                WHERE claim_required_document_id = :required_document_id
+                RETURNING claim_required_document_id, document_type, is_required, status
+            """),
+            {"required_document_id": required_document["claim_required_document_id"]},
+        ).mappings().one()
+        missing_count = db.execute(
+            text("SELECT COUNT(*) FROM claim_required_documents WHERE claim_id = :claim_id AND is_required = TRUE AND status = 'MISSING'"),
+            {"claim_id": claim_id},
+        ).scalar_one()
+        claim_status = "WAITING_FOR_DOCUMENTS"
+        if missing_count == 0:
+            claim_status = "PROCESSING"
+            db.execute(text("UPDATE claims SET status = :status, updated_at = CURRENT_TIMESTAMP WHERE claim_id = :claim_id"), {"status": claim_status, "claim_id": claim_id})
+        db.execute(
+            text("INSERT INTO audit_logs (claim_id, user_id, action, details) VALUES (:claim_id, :user_id, 'DOCUMENT_UPLOADED', CAST(:details AS jsonb))"),
+            {"claim_id": claim_id, "user_id": current_user["user_id"], "details": json.dumps({"document_type": document_type, "document_id": str(uploaded_document["document_id"])} )},
+        )
+        db.commit()
+    except Exception:
+        db.rollback()
+        if destination is not None and destination.exists():
+            destination.unlink()
+        raise
+    return {**dict(uploaded_document), "required_document": dict(required_document), "claim_status": claim_status}
 
 
 @app.post("/claims", response_model=ClaimCreateResponse, status_code=status.HTTP_201_CREATED)

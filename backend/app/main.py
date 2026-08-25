@@ -10,8 +10,9 @@ from app.auth import create_access_token, get_current_user, hash_password, verif
 from app.claim_requirements import get_required_documents
 from app.config import settings
 from app.database import get_db
+from app.document_extraction import DocumentExtractionError, extract_document_content
 from app.document_upload import store_claim_document
-from app.schemas import AuthResponse, ClaimCreateRequest, ClaimCreateResponse, ClaimDocumentUploadResponse, CustomerClaimResponse, LoginRequest, PolicyResponse, PolicyVerificationRequest, RegisterRequest
+from app.schemas import AuthResponse, ClaimCreateRequest, ClaimCreateResponse, ClaimDocumentUploadResponse, CustomerClaimResponse, DocumentExtractionResponse, LoginRequest, PolicyResponse, PolicyVerificationRequest, RegisterRequest
 
 
 app = FastAPI(
@@ -239,6 +240,90 @@ async def upload_claim_document(
             destination.unlink()
         raise
     return {**dict(uploaded_document), "required_document": dict(required_document), "claim_status": claim_status}
+
+
+@app.post("/claims/{claim_id}/documents/{document_id}/extract", response_model=DocumentExtractionResponse)
+def extract_claim_document(
+    claim_id: str,
+    document_id: str,
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if current_user["role_name"] != "Customer":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only customers can process claim documents")
+    claim = db.execute(
+        text("SELECT c.claim_id, p.user_id FROM claims c JOIN policies p ON p.policy_id = c.policy_id WHERE c.claim_id = :claim_id"),
+        {"claim_id": claim_id},
+    ).mappings().first()
+    if claim is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Claim not found")
+    if claim["user_id"] != current_user["user_id"]:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You do not have access to this claim")
+    document = db.execute(
+        text("SELECT document_id, claim_id, document_type, document_url, original_file_name, mime_type FROM claim_documents WHERE document_id = :document_id AND claim_id = :claim_id"),
+        {"document_id": document_id, "claim_id": claim_id},
+    ).mappings().first()
+    if document is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
+    existing = db.execute(
+        text("SELECT extraction_id, claim_id, extracted_data, extraction_confidence, extracted_at FROM claim_extractions WHERE claim_id = :claim_id AND extracted_data ->> 'document_id' = :document_id ORDER BY extracted_at DESC LIMIT 1"),
+        {"claim_id": claim_id, "document_id": str(document["document_id"])},
+    ).mappings().first()
+    if existing is not None:
+        return _document_extraction_response(dict(existing), reused=True)
+
+    upload_root = Path(settings.UPLOAD_DIR).resolve()
+    document_path = (upload_root / document["document_url"]).resolve()
+    if not document_path.is_relative_to(upload_root) or not document_path.is_file():
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="The uploaded file is unavailable")
+    try:
+        extracted = extract_document_content(document_path, document["mime_type"], document["document_type"])
+    except DocumentExtractionError as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+
+    extracted_data = {
+        "document_id": str(document["document_id"]),
+        "document_type": document["document_type"],
+        "original_file_name": document["original_file_name"],
+        "processing_strategy": extracted.strategy,
+        "extracted_text": extracted.text,
+        "text_length": len(extracted.text),
+    }
+    try:
+        saved = db.execute(
+            text("""
+                INSERT INTO claim_extractions (claim_id, extracted_data, extraction_confidence)
+                VALUES (:claim_id, CAST(:extracted_data AS JSONB), :extraction_confidence)
+                RETURNING extraction_id, claim_id, extracted_data, extraction_confidence, extracted_at
+            """),
+            {"claim_id": claim_id, "extracted_data": json.dumps(extracted_data), "extraction_confidence": extracted.confidence},
+        ).mappings().one()
+        db.execute(
+            text("INSERT INTO audit_logs (claim_id, user_id, action, details) VALUES (:claim_id, :user_id, 'OCR_COMPLETED', CAST(:details AS JSONB))"),
+            {"claim_id": claim_id, "user_id": current_user["user_id"], "details": json.dumps({"document_id": str(document["document_id"]), "strategy": extracted.strategy})},
+        )
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    return _document_extraction_response(dict(saved), reused=False)
+
+
+def _document_extraction_response(extraction: dict, reused: bool) -> dict:
+    data = extraction["extracted_data"]
+    if isinstance(data, str):
+        data = json.loads(data)
+    return {
+        "extraction_id": extraction["extraction_id"],
+        "claim_id": extraction["claim_id"],
+        "document_id": data["document_id"],
+        "document_type": data["document_type"],
+        "strategy": data["processing_strategy"],
+        "text_length": data["text_length"],
+        "extraction_confidence": extraction["extraction_confidence"],
+        "extracted_at": extraction["extracted_at"],
+        "reused": reused,
+    }
 
 
 @app.post("/claims", response_model=ClaimCreateResponse, status_code=status.HTTP_201_CREATED)

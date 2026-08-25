@@ -100,3 +100,15 @@ class ClaimDocumentUploadResponse(BaseModel):
     uploaded_at: datetime
     required_document: RequiredDocumentResponse
     claim_status: str
+
+
+class DocumentExtractionResponse(BaseModel):
+    extraction_id: UUID
+    claim_id: UUID
+    document_id: UUID
+    document_type: str
+    strategy: str
+    text_length: int
+    extraction_confidence: Decimal | None
+    extracted_at: datetime
+    reused: bool

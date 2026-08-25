@@ -3,13 +3,14 @@ from tempfile import TemporaryDirectory
 from uuid import uuid4
 import unittest
 
-from app.claim_import import DEFAULT_CLAIM_SOURCE_DIRECTORY, import_claims, normalize_historical_claim_type
+from app.claim_import import DEFAULT_CLAIM_SOURCE_DIRECTORY, cleanup_historical_import_extractions, import_claims, normalize_historical_claim_type
 from app.claim_requirements import get_required_documents
 
 
 class Result:
-    def __init__(self, value=None):
+    def __init__(self, value=None, rowcount=0):
         self.value = value
+        self.rowcount = rowcount
 
     def mappings(self):
         return self
@@ -25,29 +26,19 @@ class ImportDatabase:
     def __init__(self, policy_ids):
         self.policy_ids = set(policy_ids)
         self.claims = []
-        self.extractions = {}
         self.committed = False
 
     def execute(self, statement, params=None):
         sql = str(statement)
         if "FROM policies" in sql:
             return Result({"policy_id": params["policy_id"]} if params["policy_id"] in self.policy_ids else None)
-        if "FROM claim_extractions" in sql:
-            source_id = params["source_claim_id"]
-            return Result({"claim_id": self.extractions[source_id]["claim_id"]} if source_id in self.extractions else None)
+        if "FROM claims" in sql and "description = :description" in sql:
+            existing = next((claim for claim in self.claims if all(claim.get(key) == params[key] for key in ("policy_id", "claim_type", "incident_date", "submission_date", "claimed_amount", "description"))), None)
+            return Result({"claim_id": existing["claim_id"]} if existing else None)
         if "INSERT INTO claims" in sql:
             claim = {"claim_id": uuid4(), **params}
             self.claims.append(claim)
             return Result({"claim_id": claim["claim_id"]})
-        if "INSERT INTO claim_extractions" in sql:
-            import json
-
-            extracted_data = json.loads(params["extracted_data"])
-            self.extractions[extracted_data["source_claim_id"]] = {
-                "claim_id": params["claim_id"],
-                "extracted_data": extracted_data,
-            }
-            return Result()
         raise AssertionError(f"Unexpected SQL: {sql}")
 
     def commit(self):
@@ -55,6 +46,21 @@ class ImportDatabase:
 
     def rollback(self):
         raise AssertionError("Import should not roll back")
+
+
+class CleanupDatabase:
+    def execute(self, statement, params=None):
+        sql = str(statement)
+        self.assertIn("DELETE FROM claim_extractions", sql)
+        self.assertIn("source_claim_id", sql)
+        self.assertIn("source_file", sql)
+        self.assertIn("source_date_received", sql)
+        self.assertIn("document_id", sql)
+        return Result(rowcount=3)
+
+    def assertIn(self, expected, actual):
+        if expected not in actual:
+            raise AssertionError(f"{expected} not found in SQL")
 
 
 class ClaimImportTests(unittest.TestCase):
@@ -67,7 +73,7 @@ class ClaimImportTests(unittest.TestCase):
         }
         self.db = ImportDatabase(policy_ids)
 
-    def test_imports_complete_dataset_with_clean_descriptions_and_source_tracing(self):
+    def test_imports_complete_dataset_without_extraction_metadata(self):
         result = import_claims(self.db)
 
         self.assertEqual(result.source_count, 27)
@@ -81,9 +87,7 @@ class ClaimImportTests(unittest.TestCase):
         )
         self.assertTrue(self.db.committed)
         self.assertEqual(len(self.db.claims), 25)
-        self.assertEqual(len(self.db.extractions), 25)
         self.assertEqual(self.db.claims[0]["description"].splitlines()[0], "My car was hit from behind at a traffic light in Nasr City on 2026-06-18. The rear bumper and boot are damaged. I've attached photos, the garage repair estimate, my driving licence and the car registration. The repair estimate is EGP 7,500.")
-        self.assertEqual(self.db.extractions["CLM-001"]["extracted_data"]["source_file"], "CLM-001.txt")
 
     def test_rerun_does_not_duplicate_historical_or_application_claims(self):
         application_claim = {"claim_id": uuid4(), "description": "Created through the application."}
@@ -121,6 +125,9 @@ class ClaimImportTests(unittest.TestCase):
     def test_historical_accident_is_normalized_to_canonical_collision(self):
         self.assertEqual(normalize_historical_claim_type("Accident"), "Collision")
         self.assertEqual(normalize_historical_claim_type("Collision"), "Collision")
+
+    def test_cleanup_targets_only_historical_import_metadata(self):
+        self.assertEqual(cleanup_historical_import_extractions(CleanupDatabase()), 3)
 
     def test_motor_canonical_types_have_handbook_document_requirements(self):
         expected = {

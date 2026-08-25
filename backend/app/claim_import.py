@@ -1,5 +1,4 @@
 import re
-import json
 from dataclasses import dataclass, field
 from datetime import date
 from decimal import Decimal
@@ -49,6 +48,20 @@ def normalize_historical_claim_type(claim_type: str | None) -> str | None:
     return HISTORICAL_CLAIM_TYPE_ALIASES.get(claim_type, claim_type)
 
 
+def cleanup_historical_import_extractions(db: Session) -> int:
+    """Remove only legacy importer metadata, never document extraction results."""
+    deleted = db.execute(
+        text("""
+            DELETE FROM claim_extractions
+            WHERE jsonb_exists(extracted_data, 'source_claim_id')
+              AND jsonb_exists(extracted_data, 'source_file')
+              AND jsonb_exists(extracted_data, 'source_date_received')
+              AND NOT jsonb_exists(extracted_data, 'document_id')
+        """)
+    )
+    return deleted.rowcount
+
+
 def parse_claim_source(source_path: Path) -> dict:
     match = HEADER_PATTERN.match(source_path.read_text(encoding="utf-8").strip())
     if match is None:
@@ -92,22 +105,34 @@ def import_claims(db: Session, source_directory: Path = DEFAULT_CLAIM_SOURCE_DIR
                 result.skipped_claims[source_id] = f"referenced policy {source_claim['policy_id']} does not exist"
                 continue
 
-            # claim_extractions is the existing schema location for structured data
-            # extracted from claim intake.  It preserves the source identity without
-            # altering the original customer narrative in claims.description.
+            # Historical source content is stored directly in claims.description.
+            # Use the full imported claim identity to keep reruns idempotent without
+            # creating a non-document record in claim_extractions.
             existing_claim = db.execute(
                 text("""
                     SELECT claim_id
-                    FROM claim_extractions
-                    WHERE extracted_data ->> 'source_claim_id' = :source_claim_id
+                    FROM claims
+                    WHERE policy_id = :policy_id
+                      AND claim_type = :claim_type
+                      AND incident_date = :incident_date
+                      AND submission_date = :submission_date
+                      AND claimed_amount = :claimed_amount
+                      AND description = :description
                 """),
-                {"source_claim_id": source_id},
+                {
+                    "policy_id": source_claim["policy_id"],
+                    "claim_type": source_claim["claim_type"],
+                    "incident_date": source_claim["incident_date"],
+                    "submission_date": source_claim["submission_date"],
+                    "claimed_amount": source_claim["claimed_amount"],
+                    "description": source_claim["description"],
+                },
             ).first()
             if existing_claim:
                 result.skipped_claims[source_id] = "already imported"
                 continue
 
-            claim = db.execute(
+            db.execute(
                 text("""
                     INSERT INTO claims (policy_id, claim_type, incident_date, submission_date, claimed_amount, description)
                     VALUES (:policy_id, :claim_type, :incident_date, :submission_date, :claimed_amount, :description)
@@ -122,22 +147,6 @@ def import_claims(db: Session, source_directory: Path = DEFAULT_CLAIM_SOURCE_DIR
                     "description": source_claim["description"],
                 },
             ).mappings().one()
-            db.execute(
-                text("""
-                    INSERT INTO claim_extractions (claim_id, extracted_data)
-                    VALUES (:claim_id, CAST(:extracted_data AS JSONB))
-                """),
-                {
-                    "claim_id": claim["claim_id"],
-                    "extracted_data": json.dumps(
-                        {
-                            "source_claim_id": source_id,
-                            "source_file": source_path.name,
-                            "source_date_received": source_claim["submission_date"].isoformat(),
-                        }
-                    ),
-                },
-            )
             result.imported_claims += 1
         db.commit()
     except Exception:

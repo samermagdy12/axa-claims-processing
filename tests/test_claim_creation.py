@@ -79,6 +79,22 @@ class ClaimCreationTests(unittest.TestCase):
             create_claim(payload, {"user_id": self.customer_id, "role_name": "Customer"}, db)
         self.assertEqual(error.exception.status_code, 422)
 
+    def test_accepts_each_canonical_motor_claim_type(self):
+        for claim_type in ("Collision", "Fire", "Theft", "Third-Party", "Windscreen / Glass"):
+            with self.subTest(claim_type=claim_type):
+                payload = self.payload.model_copy(update={"policy_id": "POL-M-001", "claim_type": claim_type})
+                db = FakeDatabase({"policy_id": "POL-M-001", "user_id": self.customer_id, "product_line": "MOTOR"})
+                claim = create_claim(payload, {"user_id": self.customer_id, "role_name": "Customer"}, db)
+                self.assertEqual(claim["claim_type"], claim_type)
+                self.assertTrue(claim["required_documents"])
+
+    def test_rejects_historical_accident_alias_for_new_motor_claims(self):
+        payload = self.payload.model_copy(update={"policy_id": "POL-M-001", "claim_type": "Accident"})
+        db = FakeDatabase({"policy_id": "POL-M-001", "user_id": self.customer_id, "product_line": "MOTOR"})
+        with self.assertRaises(HTTPException) as error:
+            create_claim(payload, {"user_id": self.customer_id, "role_name": "Customer"}, db)
+        self.assertEqual(error.exception.status_code, 422)
+
     def test_rejects_invalid_claim_request_data(self):
         base = {"policy_id": "POL-H-001", "claim_type": "Medication", "incident_date": "2026-08-01", "claimed_amount": "1", "description": "A sufficiently detailed claim description."}
         invalid_values = [{**base, "policy_id": ""}, {**base, "claim_type": ""}, {**base, "incident_date": "not-a-date"}, {**base, "claimed_amount": "-1"}, {**base, "description": "too short"}]

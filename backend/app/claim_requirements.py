@@ -12,8 +12,8 @@ REQUIRED_DOCUMENTS: dict[str, dict[str, list[str]]] = {
     "MOTOR": {
         "Collision": ["Photos of Damage", "Repair Estimate", "Driver's Licence", "Vehicle Registration"],
         "Fire": ["Photos of Damage", "Fire Brigade Report", "Vehicle Registration"],
-        "Theft": ["Police Theft Report", "Spare Key", "Vehicle Registration"],
-        "Third-Party": ["Police Report", "Photos of Damage", "Third-Party Details"],
+        "Theft": ["Police Theft Report", "Driver's Licence", "Vehicle Registration", "Spare Key"],
+        "Third-Party": ["Police Report", "Photos of Damage", "Repair Estimate", "Driver's Licence", "Vehicle Registration"],
         "Windscreen / Glass": ["Photos of Damage", "Repair Estimate", "Vehicle Registration"],
     },
     "PROPERTY": {

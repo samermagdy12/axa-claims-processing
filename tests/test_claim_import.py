@@ -3,7 +3,8 @@ from tempfile import TemporaryDirectory
 from uuid import uuid4
 import unittest
 
-from app.claim_import import DEFAULT_CLAIM_SOURCE_DIRECTORY, import_claims
+from app.claim_import import DEFAULT_CLAIM_SOURCE_DIRECTORY, import_claims, normalize_historical_claim_type
+from app.claim_requirements import get_required_documents
 
 
 class Result:
@@ -116,6 +117,23 @@ class ClaimImportTests(unittest.TestCase):
 
         self.assertEqual(result.imported_claims, 0)
         self.assertEqual(result.skipped_claims, {"CLM-001": "referenced policy P-MISSING does not exist"})
+
+    def test_historical_accident_is_normalized_to_canonical_collision(self):
+        self.assertEqual(normalize_historical_claim_type("Accident"), "Collision")
+        self.assertEqual(normalize_historical_claim_type("Collision"), "Collision")
+
+    def test_motor_canonical_types_have_handbook_document_requirements(self):
+        expected = {
+            "Collision": ["Photos of Damage", "Repair Estimate", "Driver's Licence", "Vehicle Registration"],
+            "Theft": ["Police Theft Report", "Driver's Licence", "Vehicle Registration", "Spare Key"],
+            "Third-Party": ["Police Report", "Photos of Damage", "Repair Estimate", "Driver's Licence", "Vehicle Registration"],
+        }
+        for claim_type in ("Collision", "Fire", "Theft", "Third-Party", "Windscreen / Glass"):
+            with self.subTest(claim_type=claim_type):
+                self.assertIsNotNone(get_required_documents("MOTOR", claim_type))
+        for claim_type, requirements in expected.items():
+            self.assertEqual(get_required_documents("MOTOR", claim_type), requirements)
+        self.assertIsNone(get_required_documents("MOTOR", "Accident"))
 
 
 if __name__ == "__main__":

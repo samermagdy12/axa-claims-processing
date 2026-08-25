@@ -25,6 +25,10 @@ CLAIM_TYPE_BY_SOURCE_ID = {
     "CLM-026": "Medication", "CLM-027": "Baggage Delay",
 }
 
+# Historical source narratives use "accident" to describe the event.  Motor
+# claims are stored under the handbook's canonical Collision category.
+HISTORICAL_CLAIM_TYPE_ALIASES = {"Accident": "Collision"}
+
 # Handbook Clause 4.5 defines the fixed benefit named by CLM-027's narrative.
 DERIVED_AMOUNT_BY_SOURCE_ID = {"CLM-027": Decimal("1000")}
 HEADER_PATTERN = re.compile(r"^Claim ID: (?P<claim_id>.+)\r?\nPolicy ID: (?P<policy_id>.+)\r?\nDate received: (?P<received_date>\d{4}-\d{2}-\d{2})\r?\n\r?\n(?P<description>[\s\S]+)$")
@@ -39,6 +43,12 @@ class ImportResult:
     skipped_claims: dict[str, str] = field(default_factory=dict)
 
 
+def normalize_historical_claim_type(claim_type: str | None) -> str | None:
+    if claim_type is None:
+        return None
+    return HISTORICAL_CLAIM_TYPE_ALIASES.get(claim_type, claim_type)
+
+
 def parse_claim_source(source_path: Path) -> dict:
     match = HEADER_PATTERN.match(source_path.read_text(encoding="utf-8").strip())
     if match is None:
@@ -51,7 +61,7 @@ def parse_claim_source(source_path: Path) -> dict:
     source_claim["incident_date"] = date.fromisoformat(incident_date.group(1)) if incident_date else None
     source_claim["claimed_amount"] = Decimal(amount.group(1).replace(",", "")) if amount else DERIVED_AMOUNT_BY_SOURCE_ID.get(source_claim["claim_id"])
     source_claim["submission_date"] = date.fromisoformat(source_claim.pop("received_date"))
-    source_claim["claim_type"] = CLAIM_TYPE_BY_SOURCE_ID.get(source_claim["claim_id"])
+    source_claim["claim_type"] = normalize_historical_claim_type(CLAIM_TYPE_BY_SOURCE_ID.get(source_claim["claim_id"]))
     return source_claim
 
 

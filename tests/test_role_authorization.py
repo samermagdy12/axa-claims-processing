@@ -7,7 +7,7 @@ from jose import jwt
 
 from app.auth import ASSESSOR_ROLE, CUSTOMER_ROLE, OPERATIONS_ROLE, create_access_token, require_roles
 from app.config import settings
-from app.schemas import RegisterRequest
+from app.schemas import LoginRequest, RegisterRequest
 
 
 class RoleAuthorizationTests(unittest.TestCase):
@@ -43,6 +43,9 @@ class RoleAuthorizationTests(unittest.TestCase):
         claims = jwt.decode(token, settings.JWT_SECRET_KEY, algorithms=[settings.JWT_ALGORITHM])
         self.assertEqual(claims["sub"], str(user_id))
         self.assertNotIn("role", claims)
+
+    def test_controlled_internal_email_domain_can_sign_in(self):
+        self.assertEqual(LoginRequest(email="assessor@axa.local", password="password").email, "assessor@axa.local")
 
 
 if __name__ == "__main__":

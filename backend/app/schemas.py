@@ -18,7 +18,8 @@ class PolicyVerificationRequest(BaseModel):
 
 
 class LoginRequest(BaseModel):
-    email: EmailStr
+    # Internal AXA accounts use the controlled .local domain.
+    email: str = Field(min_length=3, max_length=255, pattern=r"^[^@\s]+@[^@\s]+$")
     password: str = Field(min_length=1)
 
 

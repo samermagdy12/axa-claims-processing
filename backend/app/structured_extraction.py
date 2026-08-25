@@ -4,6 +4,7 @@ from __future__ import annotations
 import re
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
+from difflib import SequenceMatcher
 from typing import Callable
 
 
@@ -20,25 +21,47 @@ _COMMON_LABELS = {
 }
 
 
-def extract_structured_data(document_type: str, raw_text: str) -> dict:
+def extract_structured_data(document_type: str, raw_text: str, processing_strategy: str | None = None) -> dict:
     """Conservatively interpret raw text without changing the raw source."""
     if document_type in VISUAL_EVIDENCE_DOCUMENT_TYPES:
         return {"visual_evidence_preserved": True, "structured_extraction_available": False}
     parser = STRUCTURED_EXTRACTORS.get(document_type)
     if parser is None or not raw_text or not raw_text.strip():
         return {"structured_extraction_available": False, "reason": "No reliable structured fields could be extracted"}
-    data = parser(_normalise_for_parsing(raw_text))
+    data = parser(_normalise_for_parsing(raw_text, processing_strategy))
     return data or {"structured_extraction_available": False, "reason": "No reliable structured fields could be extracted"}
 
 
-def _normalise_for_parsing(text: str) -> list[str]:
-    """Normalise a parsing copy while preserving its meaningful line boundaries."""
+def _normalise_for_parsing(text: str, processing_strategy: str | None = None) -> list[str]:
+    """Create a parsing copy; OCR sources additionally recover safe boundaries."""
     text = text.replace("\r\n", "\n").replace("\r", "\n").replace("–", "-").replace("—", "-")
-    return [re.sub(r"[ \t]+", " ", line).strip() for line in text.split("\n") if line.strip()]
+    lines = [re.sub(r"[ \t]+", " ", line).strip() for line in text.split("\n") if line.strip()]
+    if processing_strategy in {"image_ocr", "scanned_pdf_ocr"}:
+        expanded: list[str] = []
+        for line in lines:
+            dates = re.findall(r"\d{1,2}[/-]\d{1,2}[/-]\d{4}", line)
+            expanded.extend(dates if len(dates) > 1 and "".join(dates) == re.sub(r"\s+", "", line) else [line])
+        lines = expanded
+    return lines
 
 
 def _key(value: str) -> str:
     return re.sub(r"[^a-z0-9]+", " ", value.lower()).strip()
+
+
+def _compact(value: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "", value.lower())
+
+
+def _label_matches(observed: str, expected: str) -> bool:
+    """Match canonical, compacted, and small OCR-corrupted label variants."""
+    observed_compact = _compact(observed).lstrip("0123456789")
+    expected_compact = _compact(expected)
+    if observed_compact == expected_compact:
+        return True
+    if len(expected_compact) >= 5 and observed_compact.startswith(expected_compact):
+        return True
+    return len(expected_compact) >= 5 and len(observed_compact) >= 4 and SequenceMatcher(None, observed_compact, expected_compact).ratio() >= 0.90
 
 
 def _valid_value(value: str, labels: set[str]) -> bool:
@@ -56,9 +79,9 @@ def _line_value(lines: list[str], *labels: str) -> str | None:
     label_keys = {_key(label) for label in labels}
     for index, line in enumerate(lines):
         key, separator, value = line.partition(":")
-        if separator and _key(key) in label_keys and _valid_value(value, label_keys):
+        if separator and any(_label_matches(key, label) for label in labels) and _valid_value(value, label_keys):
             return value.strip()
-        if _key(line) in label_keys and index + 1 < len(lines) and _valid_value(lines[index + 1], label_keys):
+        if any(_label_matches(line, label) for label in labels) and index + 1 < len(lines) and _valid_value(lines[index + 1], label_keys):
             return lines[index + 1]
     return None
 
@@ -98,6 +121,11 @@ def _currency(lines: list[str]) -> str | None:
 
 def _integer(value: str | None) -> int | None:
     return int(value) if value and value.isdigit() else None
+
+
+def _number_from_text(value: str | None) -> int | None:
+    match = re.search(r"\b(\d{1,6})\b", value or "")
+    return int(match.group(1)) if match else None
 
 
 def _vehicle_year(value: str | None) -> int | None:
@@ -143,7 +171,7 @@ def _empty_repair_estimate() -> dict:
 def _repair_estimate(lines: list[str]) -> dict:
     # Do not turn arbitrary OCR fragments into an all-null "estimate" record.
     recognised = {"garage", "workshop", "repairer", "estimate no", "estimate number", "issued", "issue date", "estimate date", "customer", "vehicle", "registration", "claim reference", "damage assessment", "total estimated repair cost"}
-    if not any(_key(line.partition(":")[0]) in recognised or _key(line) in recognised for line in lines):
+    if not any(any(_label_matches(line.partition(":")[0], label) or _label_matches(line, label) for label in recognised) for line in lines):
         return {}
     data = _empty_repair_estimate()
     first = lines[0] if lines else None
@@ -171,12 +199,12 @@ def _repair_estimate(lines: list[str]) -> dict:
 
 
 def _section(lines: list[str], start: str, end: str) -> str | None:
-    start_index = next((i for i, line in enumerate(lines) if _key(line) == _key(start)), None)
+    start_index = next((i for i, line in enumerate(lines) if _label_matches(line, start)), None)
     if start_index is None:
         return None
     values: list[str] = []
     for line in lines[start_index + 1:]:
-        if _key(line) == _key(end) or re.search(r"\b(?:item|parts|labour|total)\b", line, re.I):
+        if _label_matches(line, end) or re.search(r"\b(?:item|parts|labour|total)\b", line, re.I):
             break
         values.append(line)
     return " ".join(values) or None
@@ -206,10 +234,26 @@ def _drivers_licence(lines: list[str]) -> dict:
     authority = _line_value(lines, "issuing authority", "issuer", "state")
     if authority is None:
         authority = next((line.title() for line in lines[:2] if re.fullmatch(r"(?:south|north) carolina|egypt|cairo", line, re.I)), None)
-    return {"full_name": _line_value(lines, "name", "full name"), "licence_number": _line_value(lines, "licence number", "license number", "dl number"),
-            "date_of_birth": _labelled_date(lines, "dob", "date of birth", month_first=True), "issue_date": _labelled_date(lines, "issue date", "issued", month_first=True),
-            "expiry_date": _labelled_date(lines, "expiry date", "expiration date", "expires", month_first=True), "vehicle_class": _licence_class(_line_value(lines, "vehicle class", "class")),
-            "issuing_authority": authority, "address": _line_value(lines, "address"), "sex": _line_value(lines, "sex", "gender"),
+    dates = [_date(value, month_first=True) for line in lines for value in re.findall(r"\d{1,2}[/-]\d{1,2}[/-]\d{4}", line)]
+    dates = [value for value in dates if value]
+    class_index = next((index for index, line in enumerate(lines) if _label_matches(line, "class")), None)
+    nearby_class = next((_licence_class(candidate) for candidate in lines[class_index + 1:class_index + 5] if _licence_class(candidate)), None) if class_index is not None else None
+    licence_number = _line_value(lines, "licence number", "license number", "dl number")
+    if licence_number is None:
+        licence_number = next((line for line in lines if re.fullmatch(r"[A-Z]\d{7,14}", line.strip(), re.I)), None)
+    sex = _line_value(lines, "sex", "gender")
+    if sex is None:
+        sex = next((line.upper() for line in lines if re.fullmatch(r"[FM]", line.strip(), re.I)), None)
+    address = _line_value(lines, "address")
+    if address is None:
+        address_lines = [line for line in lines if re.search(r"\d{2,}.*(?:street|st\b|road|rd\b|avenue|ave\b)|\b[A-Z][A-Z]+,\s*[A-Z]{2}\s*\d{5}\b", line, re.I)]
+        address = " ".join(address_lines) or None
+    return {"full_name": _line_value(lines, "name", "full name"), "licence_number": licence_number,
+            "date_of_birth": _labelled_date(lines, "dob", "date of birth", month_first=True) or (dates[0] if dates else None),
+            "issue_date": _labelled_date(lines, "issue date", "issued", month_first=True) or (dates[-2] if len(dates) >= 2 else None),
+            "expiry_date": _labelled_date(lines, "expiry date", "expiration date", "expires", month_first=True) or (dates[-1] if len(dates) >= 2 else None),
+            "vehicle_class": nearby_class or _licence_class(_line_value(lines, "vehicle class", "class")),
+            "issuing_authority": authority, "address": address, "sex": sex,
             "restrictions": _line_value(lines, "restrictions", "restriction")}
 
 
@@ -221,8 +265,8 @@ def _vehicle_registration(lines: list[str]) -> dict:
             "vehicle_make": _line_value(lines, "vehicle make", "make"), "vehicle_model": _line_value(lines, "vehicle model", "model"),
             "model_year": _vehicle_year(_line_value(lines, "model year", "year")), "vehicle_type": _line_value(lines, "vehicle type", "type"),
             "colour": _line_value(lines, "colour", "color"), "engine_number": _line_value(lines, "engine number"),
-            "engine_capacity_cc": _integer(_line_value(lines, "engine capacity cc", "engine capacity")), "fuel_type": _line_value(lines, "fuel type"),
-            "number_of_seats": _integer(_line_value(lines, "number of seats", "seats")),
+            "engine_capacity_cc": _number_from_text(_line_value(lines, "engine capacity cc", "engine capacity")), "fuel_type": _line_value(lines, "fuel type"),
+            "number_of_seats": _number_from_text(_line_value(lines, "number of seats", "seats")),
             "registration_issue_date": _labelled_date(lines, "registration issue date", "issue date"),
             "registration_expiry_date": _labelled_date(lines, "registration expiry date", "registration expiry", "registration expiration", "expiry date"),
             "issuing_authority": _line_value(lines, "issuing authority", "authority"), "status": _line_value(lines, "status")}
@@ -248,11 +292,14 @@ def _police_report(lines: list[str]) -> dict:
         match = re.search(r"\bregistration\s+([A-Z0-9-]{4,16})\b", vehicle, re.I)
         registration = _registration_number(match.group(1)) if match else None
     narrative = _line_value(lines, "incident summary", "summary")
+    officer_notes = _line_value(lines, "officer notes", "officer note", "notes")
+    injury_text = " ".join(value for value in (narrative, officer_notes, _line_value(lines, "injuries reported", "injuries")) if value)
+    injuries_reported = False if re.search(r"\bno injuries\b", injury_text, re.I) else (True if re.search(r"\binjur(?:y|ies)\b", injury_text, re.I) else None)
     return {"report_number": _line_value(lines, "report number", "report no", "police report number"), "incident_date": _labelled_date(lines, "incident date", "accident date"),
             "incident_time": _time(_line_value(lines, "incident time", "time")), "incident_location": _line_value(lines, "incident location", "accident location", "location"),
             "reporting_authority": _line_value(lines, "reporting authority", "police station", "authority"), "driver_name": _line_value(lines, "driver", "driver name"),
-            "vehicle_information": vehicle, "registration_number": registration, "incident_summary": narrative, "officer_notes": _line_value(lines, "officer notes", "notes"),
-            "injuries_reported": _line_value(lines, "injuries reported", "injuries"), "raw_narrative": narrative}
+            "vehicle_information": vehicle, "registration_number": registration, "incident_summary": narrative, "officer_notes": officer_notes,
+            "injuries_reported": injuries_reported, "raw_narrative": narrative}
 
 
 def _member_id(lines: list[str]) -> dict:

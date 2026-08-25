@@ -228,6 +228,54 @@ Vehicle was hit from behind while stopped at a traffic signal.""")
         self.assertIsNone(licence["vehicle_class"])
         self.assertEqual(licence["licence_number"], "DL-10001")
 
+    def test_ocr_style_labels_and_merged_values_use_the_same_document_parsers(self):
+        police = extract_structured_data("Police Report", """POLICEREPORT
+REPORTNUMBER
+PR-12345
+INCIDENTDATE
+18 June 2026
+INCIDENTTIME
+14:35
+LOCATION
+Nasr City, Cairo
+DRIVER
+Mona Adel
+VEHICLE
+Toyota Corolla - Registration ABC-1234
+INCIDENTSUMMARY
+Vehicle was hit from behind while stopped at a traffic signal.
+OFFICER NOTE
+No injuries were reported at the scene.""", "image_ocr")
+        self.assertEqual(police["report_number"], "PR-12345")
+        self.assertEqual(police["incident_date"], "2026-06-18")
+        self.assertEqual(police["incident_time"], "14:35")
+        self.assertEqual(police["registration_number"], "ABC-1234")
+        self.assertFalse(police["injuries_reported"])
+        self.assertIn("No injuries", police["officer_notes"])
+
+        licence = extract_structured_data("Driver's Licence", """A1234567890
+3Date of bith
+01/01/2000
+F
+8123MAINSTREET
+COLUMBIA,SC29201
+Class
+9aEnd
+D
+NONE
+4alssue
+4bExp
+08/27/202508/27/2033""", "scanned_pdf_ocr")
+        self.assertEqual(licence["licence_number"], "A1234567890")
+        self.assertEqual(licence["date_of_birth"], "2000-01-01")
+        self.assertEqual(licence["sex"], "F")
+        self.assertEqual(licence["vehicle_class"], "D")
+        self.assertEqual(licence["issue_date"], "2025-08-27")
+        self.assertEqual(licence["expiry_date"], "2033-08-27")
+
+        registration = extract_structured_data("Vehicle Registration", "Engine Capacity\n1800 CC")
+        self.assertEqual(registration["engine_capacity_cc"], 1800)
+
     def test_every_requirement_document_type_has_an_intentional_parser_or_visual_result(self):
         from app.claim_requirements import REQUIRED_DOCUMENTS
 

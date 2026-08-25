@@ -12,6 +12,7 @@ from PIL import Image
 
 from app.document_extraction import DocumentExtractionError, extract_document_content
 from app.main import extract_claim_document
+from app.structured_extraction import extract_structured_data
 
 
 class Result:
@@ -75,6 +76,66 @@ class ExtractionDatabase:
 
 
 class DocumentExtractionTests(unittest.TestCase):
+    def test_structures_driver_licence_fields_and_normalizes_dates(self):
+        data = extract_structured_data("Driver's Licence", """SOUTH CAROLINA
+Name: SAMPLE CAROLINE
+Licence Number: 1234567890
+DOB: 08/27/2000
+Address: 813 MAIN STREET, COLUMBIA, SC 29201
+Class: C
+Restrictions: NONE
+Issue Date: 08/27/2025
+Expiry Date: 08/27/2033""")
+        self.assertEqual(data["full_name"], "SAMPLE CAROLINE")
+        self.assertEqual(data["licence_number"], "1234567890")
+        self.assertEqual(data["date_of_birth"], "2000-08-27")
+        self.assertEqual(data["expiry_date"], "2033-08-27")
+        self.assertEqual(data["issuing_authority"], "South Carolina")
+
+    def test_structures_vehicle_registration_and_repair_estimate(self):
+        registration = extract_structured_data("Vehicle Registration", """Owner: Mona Adel
+Registration Number: ABC-1234
+Plate Number: ABC-1234
+Make: Toyota
+Model: Corolla
+Year: 2022
+VIN: 1HGCM82633A004352
+Registration Expiry: 2027-06-18""")
+        self.assertEqual(registration["owner_name"], "Mona Adel")
+        self.assertEqual(registration["vehicle_year"], 2022)
+        self.assertEqual(registration["registration_expiry_date"], "2027-06-18")
+
+        estimate = extract_structured_data("Repair Estimate", """Garage: ABC Garage
+Estimate Number: EST-102
+Estimate Date: 2026-06-18
+Customer: Mona Adel
+Vehicle: Toyota Corolla
+Damage: rear bumper deformation, trunk lid creasing
+- Rear bumper replacement EGP 2850
+- Paint work EGP 4650
+Total Estimated: EGP 7,500""")
+        self.assertEqual(estimate["garage_name"], "ABC Garage")
+        self.assertEqual(estimate["estimate_date"], "2026-06-18")
+        self.assertEqual(estimate["total_estimated_cost"], 7500.0)
+        self.assertEqual(estimate["currency"], "EGP")
+        self.assertEqual(len(estimate["repair_items"]), 2)
+
+    def test_structures_invoice_medical_police_and_member_id_without_fabrication(self):
+        invoice = extract_structured_data("Itemised Invoice", """Provider: Cairo Clinic
+Invoice Number: INV-77
+Invoice Date: 2026-06-18
+Subtotal: EGP 1000
+VAT: EGP 140
+Total Amount: EGP 1140""")
+        self.assertEqual(invoice["total_amount"], 1140.0)
+        self.assertEqual(invoice["currency"], "EGP")
+        medical = extract_structured_data("Medical Report", "Patient: Layla Mostafa\nDiagnosis: Sprained ankle\nReport Date: 2026-06-18")
+        self.assertEqual(medical["diagnosis"], "Sprained ankle")
+        police = extract_structured_data("Police Report", "Report Number: PR-100\nIncident Date: 2026-06-18\nIncident Location: Nasr City")
+        self.assertEqual(police["report_number"], "PR-100")
+        member = extract_structured_data("Member ID", "Member Name: Layla Mostafa\nMember ID: MID-123\nPolicy Number: POL-88\nExpiry: 2027-06-18")
+        self.assertEqual(member["member_id"], "MID-123")
+        self.assertEqual(extract_structured_data("Repair Estimate", "unreadable OCR fragments"), {})
     def test_extracts_native_docx_text(self):
         with TemporaryDirectory() as directory:
             path = Path(directory) / "estimate.docx"
@@ -124,6 +185,10 @@ class DocumentExtractionTests(unittest.TestCase):
         self.assertEqual(first["document_id"], str(db.document_id))
         self.assertEqual(db.extraction["extracted_data"]["document_id"], str(db.document_id))
         self.assertEqual(db.extraction["extracted_data"]["extracted_text"], "Repair estimate: EGP 7,500")
+        self.assertEqual(db.extraction["extracted_data"]["raw_extraction"]["text"], "Repair estimate: EGP 7,500")
+        self.assertEqual(db.extraction["extracted_data"]["structured_data"], {})
+        self.assertEqual(first["raw_text"], "Repair estimate: EGP 7,500")
+        self.assertEqual(first["structured_data"], {})
         self.assertTrue(db.committed)
 
     def test_rejects_another_customers_claim_and_missing_files(self):

@@ -110,6 +110,8 @@ class DocumentExtractionResponse(BaseModel):
     document_id: UUID
     document_type: str
     strategy: str
+    raw_text: str
+    structured_data: dict = Field(default_factory=dict)
     text_length: int
     extraction_confidence: Decimal | None
     extracted_at: datetime

@@ -11,6 +11,7 @@ from app.claim_requirements import get_required_documents
 from app.config import settings
 from app.database import get_db
 from app.document_extraction import DocumentExtractionError, extract_document_content
+from app.structured_extraction import extract_structured_data
 from app.document_upload import store_claim_document
 from app.schemas import AuthResponse, ClaimCreateRequest, ClaimCreateResponse, ClaimDocumentUploadResponse, CustomerClaimResponse, DocumentExtractionResponse, LoginRequest, PolicyResponse, PolicyVerificationRequest, RegisterRequest
 
@@ -286,7 +287,11 @@ def extract_claim_document(
         "document_type": document["document_type"],
         "original_file_name": document["original_file_name"],
         "processing_strategy": extracted.strategy,
+        # Keep the legacy field for existing consumers while making raw text
+        # and document-specific parsed fields explicit for future validation.
         "extracted_text": extracted.text,
+        "raw_extraction": {"text": extracted.text},
+        "structured_data": extract_structured_data(document["document_type"], extracted.text),
         "text_length": len(extracted.text),
     }
     try:
@@ -319,6 +324,8 @@ def _document_extraction_response(extraction: dict, reused: bool) -> dict:
         "document_id": data["document_id"],
         "document_type": data["document_type"],
         "strategy": data["processing_strategy"],
+        "raw_text": data.get("raw_extraction", {}).get("text", data.get("extracted_text", "")),
+        "structured_data": data.get("structured_data", {}),
         "text_length": data["text_length"],
         "extraction_confidence": extraction["extraction_confidence"],
         "extracted_at": extraction["extracted_at"],

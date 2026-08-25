@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 from uuid import UUID
 
@@ -42,3 +42,30 @@ class PolicyResponse(BaseModel):
     remaining_limit: Decimal
     deductible: Decimal
     riders: list[str]
+
+
+class ClaimCreateRequest(BaseModel):
+    policy_id: str = Field(min_length=1, max_length=50)
+    claim_type: str = Field(min_length=1, max_length=50)
+    incident_date: date
+    claimed_amount: Decimal = Field(ge=0, max_digits=12, decimal_places=2)
+    description: str = Field(min_length=20)
+
+
+class RequiredDocumentResponse(BaseModel):
+    claim_required_document_id: UUID
+    document_type: str
+    is_required: bool
+    status: str
+
+
+class ClaimCreateResponse(BaseModel):
+    claim_id: UUID
+    policy_id: str
+    claim_type: str
+    incident_date: date
+    submission_date: datetime
+    claimed_amount: Decimal
+    description: str | None
+    status: str
+    required_documents: list[RequiredDocumentResponse]

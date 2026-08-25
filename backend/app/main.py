@@ -4,9 +4,10 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.auth import create_access_token, get_current_user, hash_password, verify_password
+from app.claim_requirements import get_required_documents
 from app.config import settings
 from app.database import get_db
-from app.schemas import AuthResponse, LoginRequest, PolicyResponse, RegisterRequest
+from app.schemas import AuthResponse, ClaimCreateRequest, ClaimCreateResponse, LoginRequest, PolicyResponse, RegisterRequest
 
 
 app = FastAPI(
@@ -77,3 +78,49 @@ def get_policy(policy_id: str, current_user: dict = Depends(get_current_user), d
     if policy is None:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You do not have access to this policy")
     return serialize_policy(dict(policy))
+
+
+@app.post("/claims", response_model=ClaimCreateResponse, status_code=status.HTTP_201_CREATED)
+def create_claim(payload: ClaimCreateRequest, current_user: dict = Depends(get_current_user), db: Session = Depends(get_db)):
+    if current_user["role_name"] != "Customer":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only customers can create claims")
+
+    policy = db.execute(
+        text("SELECT policy_id, user_id, product_line FROM policies WHERE policy_id = :policy_id"),
+        {"policy_id": payload.policy_id},
+    ).mappings().first()
+    if policy is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Policy not found")
+    if policy["user_id"] != current_user["user_id"]:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You do not have access to this policy")
+
+    required_document_types = get_required_documents(policy["product_line"], payload.claim_type)
+    if required_document_types is None:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Claim type is not supported for this policy")
+
+    try:
+        claim = db.execute(
+            text("""
+                INSERT INTO claims (policy_id, claim_type, incident_date, claimed_amount, description, status)
+                VALUES (:policy_id, :claim_type, :incident_date, :claimed_amount, :description, 'WAITING_FOR_DOCUMENTS')
+                RETURNING claim_id, policy_id, claim_type, incident_date, submission_date, claimed_amount, description, status
+            """),
+            payload.model_dump(),
+        ).mappings().one()
+        required_documents = []
+        for document_type in required_document_types:
+            required_document = db.execute(
+                text("""
+                    INSERT INTO claim_required_documents (claim_id, document_type, is_required, status)
+                    VALUES (:claim_id, :document_type, TRUE, 'MISSING')
+                    RETURNING claim_required_document_id, document_type, is_required, status
+                """),
+                {"claim_id": claim["claim_id"], "document_type": document_type},
+            ).mappings().one()
+            required_documents.append(dict(required_document))
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+
+    return {**dict(claim), "required_documents": required_documents}

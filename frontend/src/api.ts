@@ -8,6 +8,18 @@ export interface AuthSession {
   user: { user_id: string; full_name: string; email: string; role: string };
 }
 
+export interface CreatedClaim {
+  claim_id: string;
+  policy_id: string;
+  claim_type: string;
+  incident_date: string;
+  submission_date: string;
+  claimed_amount: number;
+  description: string | null;
+  status: string;
+  required_documents: { claim_required_document_id: string; document_type: string; is_required: boolean; status: 'MISSING' | 'UPLOADED' | 'VERIFIED' }[];
+}
+
 type ApiPolicy = {
   policy_id: string; policy_number: string; product_line: Policy['productLine']; status: Policy['status'];
   start_date: string; end_date: string; annual_limit: number; remaining_limit: number; deductible: number; riders: string[];
@@ -29,3 +41,6 @@ export function login(data: { email: string; password: string }) { return reques
 function toPolicy(policy: ApiPolicy): Policy { return { id: policy.policy_id, number: policy.policy_number, productLine: policy.product_line, status: policy.status, startDate: policy.start_date, endDate: policy.end_date, annualLimit: Number(policy.annual_limit), remainingLimit: Number(policy.remaining_limit), deductible: Number(policy.deductible), riders: policy.riders }; }
 export async function getMyPolicies(token: string): Promise<Policy[]> { return (await request<ApiPolicy[]>('/policies/my', { headers: { Authorization: `Bearer ${token}` } })).map(toPolicy); }
 export async function getPolicy(policyId: string, token: string): Promise<Policy> { return toPolicy(await request<ApiPolicy>(`/policies/${encodeURIComponent(policyId)}`, { headers: { Authorization: `Bearer ${token}` } })); }
+export function createClaim(token: string, data: { policyId: string; claimType: string; incidentDate: string; claimedAmount: number; description: string }) {
+  return request<CreatedClaim>('/claims', { method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: JSON.stringify({ policy_id: data.policyId, claim_type: data.claimType, incident_date: data.incidentDate, claimed_amount: data.claimedAmount, description: data.description }) });
+}

@@ -97,7 +97,7 @@ export default function App() {
           )}
           {screen === 'my-claims' && <MyClaims navigate={navigate} />}
           {screen === 'new-claim' && (
-            <NewClaim preselectedPolicyId={selectedPolicyId} navigate={navigate} />
+            <NewClaim preselectedPolicyId={selectedPolicyId} token={token || ''} navigate={navigate} />
           )}
           {screen === 'claim-details' && (
             <ClaimDetails claimId={selectedClaimId || 'clm-001'} navigate={navigate} />

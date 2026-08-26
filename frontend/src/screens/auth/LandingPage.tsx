@@ -20,8 +20,8 @@ const DEMO_ROLES: {
 }[] = [
   {
     role: 'customer',
-    name: 'Ahmed Hassan',
-    email: 'ahmed.hassan@email.com',
+    name: 'Customer account',
+    email: '',
     title: 'Customer',
     desc: 'Manage policies · File & track claims',
     icon: '👤',
@@ -30,8 +30,8 @@ const DEMO_ROLES: {
   },
   {
     role: 'assessor',
-    name: 'Sara Khalil',
-    email: 'sara.khalil@axa-egypt.com',
+    name: 'AXA Assessor',
+    email: 'assessor@axa.local',
     title: 'Assessor',
     desc: 'Review queue · Human decisions',
     icon: '🔍',
@@ -40,8 +40,8 @@ const DEMO_ROLES: {
   },
   {
     role: 'operations',
-    name: 'Hany Ibrahim',
-    email: 'hany.ibrahim@axa-egypt.com',
+    name: 'AXA Operations',
+    email: 'operations@axa.local',
     title: 'Operations',
     desc: 'Read-only processing summary',
     icon: '📊',
@@ -60,7 +60,7 @@ export default function LandingPage({ onSignIn, onGoSignUp }: LandingPageProps) 
   const handleRoleSelect = (r: typeof DEMO_ROLES[0]) => {
     setSelectedRole(r.role);
     setEmail(r.email);
-    setPassword('demo');
+    setPassword('');
     setError('');
   };
 
@@ -158,8 +158,8 @@ export default function LandingPage({ onSignIn, onGoSignUp }: LandingPageProps) 
           </div>
 
           {/* The backend, not this form, resolves the authenticated user's role. */}
-          {false && (<div className="mb-6">
-            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Select demo role</p>
+          <div className="mb-6">
+            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Choose account type</p>
             <div className="grid grid-cols-3 gap-2">
               {DEMO_ROLES.map(r => (
                 <button
@@ -177,7 +177,10 @@ export default function LandingPage({ onSignIn, onGoSignUp }: LandingPageProps) 
                 </button>
               ))}
             </div>
-          </div>)}
+            <p className="text-xs text-gray-500 mt-3">
+              Customer accounts use their registered credentials. Internal Assessor and Operations accounts use the development accounts seeded for this environment.
+            </p>
+          </div>
           <form onSubmit={handleSubmit} className="space-y-4">
             <Input
               label="Email address"

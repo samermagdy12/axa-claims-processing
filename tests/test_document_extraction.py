@@ -542,8 +542,23 @@ Total Amount: EGP 1140""")
         self.assertEqual(db.extraction["extracted_data"]["raw_extraction"]["text"], "Repair estimate: EGP 7,500")
         self.assertEqual(db.extraction["extracted_data"]["structured_data"]["structured_extraction_available"], False)
         self.assertEqual(first["raw_text"], "Repair estimate: EGP 7,500")
+        self.assertEqual(first["validation"]["status"], "valid")
+        self.assertTrue(first["validation"]["document_valid"])
         self.assertEqual(first["structured_data"]["structured_extraction_available"], False)
         self.assertTrue(db.committed)
+
+    def test_extraction_response_reports_a_wrong_document_type(self):
+        owner_id = uuid4()
+        with TemporaryDirectory() as directory, patch("app.main.settings.UPLOAD_DIR", directory):
+            db = ExtractionDatabase(owner_id, Path(directory))
+            db.document["document_type"] = "Repair Estimate"
+            destination = Path(directory) / db.document["document_url"]
+            destination.write_text("DRIVER'S LICENCE\nLicence Number: DL-10001\nDate of Birth: 01/01/2000", encoding="utf-8")
+            response = extract_claim_document(str(db.claim_id), str(db.document_id), {"user_id": owner_id, "role_name": "Customer"}, db)
+        self.assertEqual(response["validation"]["status"], "invalid")
+        self.assertFalse(response["validation"]["document_valid"])
+        self.assertEqual(response["validation"]["expected_document_type"], "Repair Estimate")
+        self.assertEqual(response["validation"]["detected_document_type"], "Driver's Licence")
 
     def test_rejects_another_customers_claim_and_missing_files(self):
         owner_id, other_id = uuid4(), uuid4()

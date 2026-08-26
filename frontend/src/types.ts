@@ -41,6 +41,7 @@ export interface Decision {
   handbookClause?: string;
   missingDocuments?: string[];
   customerMessage?: string;
+  llmRecommendation?: string;
 }
 
 export interface Claim {
@@ -119,6 +120,7 @@ export interface NavigateParams {
   processingDocuments?: string;
   completedExtractions?: string;
   processingFailures?: string;
+  processingValidationResults?: string;
 }
 
 export type Screen =

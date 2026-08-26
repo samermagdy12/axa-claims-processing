@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Alert, Amount, Button, Card, DocStatusChip, Input, PageHeader, PolicyStatusBadge, ProductBadge, Select, Textarea } from '../../components/UI';
 import { createClaim, extractClaimDocument, getMyPolicies, uploadClaimDocument } from '../../api';
+import type { DocumentValidation } from '../../api';
 import type { Policy, Screen } from '../../types';
 
 interface NewClaimProps { preselectedPolicyId?: string; token: string; navigate: (screen: Screen, params?: Record<string, string>) => void; }
@@ -63,11 +64,21 @@ export default function NewClaim({ preselectedPolicyId, token, navigate }: NewCl
     try {
       const claim = await createClaim(token, { policyId: policy.id, claimType, incidentDate, claimedAmount: Number(claimedAmount), description: description.trim() });
       let processed = 0; let extracted = 0; let failures = 0;
+      const validationResults: { documentType: string; validation: DocumentValidation }[] = [];
       for (const document of claim.required_documents) {
         const file = files[document.document_type]; if (!file) continue;
-        try { const uploaded = await uploadClaimDocument(token, claim.claim_id, document.document_type, file); processed += 1; await extractClaimDocument(token, claim.claim_id, uploaded.document_id); extracted += 1; } catch { failures += 1; }
+        try {
+          const uploaded = await uploadClaimDocument(token, claim.claim_id, document.document_type, file);
+          processed += 1;
+          const extraction = await extractClaimDocument(token, claim.claim_id, uploaded.document_id);
+          validationResults.push({ documentType: document.document_type, validation: extraction.validation });
+          extracted += 1;
+        } catch {
+          failures += 1;
+          validationResults.push({ documentType: document.document_type, validation: { status: 'failed', document_valid: false, message: 'We could not process this document. Please upload a clear, supported file and try again.', errors: [], warnings: [], expected_document_type: document.document_type, detected_document_type: null } });
+        }
       }
-      navigate('claim-processing', { selectedClaimId: claim.claim_id, processingDocuments: String(processed), completedExtractions: String(extracted), processingFailures: String(failures) });
+      navigate('claim-processing', { selectedClaimId: claim.claim_id, processingDocuments: String(processed), completedExtractions: String(extracted), processingFailures: String(failures), processingValidationResults: JSON.stringify(validationResults) });
     } catch (error) { setLoadError(error instanceof Error ? error.message : 'Unable to submit your claim.'); setSubmitting(false); }
   };
 

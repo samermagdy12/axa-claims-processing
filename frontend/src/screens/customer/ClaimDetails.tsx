@@ -2,22 +2,26 @@ import { useEffect, useRef, useState } from 'react';
 import {
   Button, Card, ClaimStatusBadge, ProductBadge, PageHeader, Amount, Alert, DataRow, DocStatusChip, Spinner,
 } from '../../components/UI';
-import { getClaim, uploadClaimDocument } from '../../api';
+import { decideClaim, extractClaimDocument, getClaim, removeClaimDocument, uploadClaimDocument } from '../../api';
+import type { DocumentValidation } from '../../api';
 import type { Claim, Screen } from '../../types';
 
 interface ClaimDetailsProps {
   claimId: string;
   token: string;
+  initialValidationResults: string;
   navigate: (screen: Screen, params?: Record<string, string>) => void;
 }
 
-export default function ClaimDetails({ claimId, token, navigate }: ClaimDetailsProps) {
+export default function ClaimDetails({ claimId, token, initialValidationResults, navigate }: ClaimDetailsProps) {
   const [claim, setClaim] = useState<Claim | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [uploadingDocument, setUploadingDocument] = useState<string | null>(null);
   const [uploadError, setUploadError] = useState('');
   const [pendingDocumentType, setPendingDocumentType] = useState('');
+  const [deciding, setDeciding] = useState(false);
+  const [documentValidation, setDocumentValidation] = useState<Record<string, DocumentValidation>>(() => parseValidationResults(initialValidationResults));
   const fileRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
@@ -45,20 +49,58 @@ export default function ClaimDetails({ claimId, token, navigate }: ClaimDetailsP
     fileRef.current?.click();
   };
 
+  const requestDecision = async () => {
+    setDeciding(true);
+    setError('');
+    try {
+      await decideClaim(token, claimId);
+      setClaim(await getClaim(claimId, token));
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : 'Unable to complete the claim decision.');
+    } finally {
+      setDeciding(false);
+    }
+  };
+
   const uploadSelectedDocument = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file || !pendingDocumentType) return;
     setUploadingDocument(pendingDocumentType);
     setUploadError('');
     try {
-      await uploadClaimDocument(token, claim.id, pendingDocumentType, file);
+      const uploaded = await uploadClaimDocument(token, claim.id, pendingDocumentType, file);
+      setDocumentValidation(current => ({ ...current, [pendingDocumentType]: pendingValidation(pendingDocumentType) }));
+      const extraction = await extractClaimDocument(token, claim.id, uploaded.document_id);
+      setDocumentValidation(current => ({ ...current, [pendingDocumentType]: extraction.validation }));
       setClaim(await getClaim(claim.id, token));
     } catch (requestError) {
-      setUploadError(requestError instanceof Error ? requestError.message : 'Unable to upload the document.');
+      const message = 'We could not process this document. Please upload a clear, supported file and try again.';
+      setDocumentValidation(current => ({ ...current, [pendingDocumentType]: failedValidation(pendingDocumentType, message) }));
+      setUploadError(message);
     } finally {
       setUploadingDocument(null);
       setPendingDocumentType('');
       event.target.value = '';
+    }
+  };
+
+  const replaceDocument = async (documentType: string) => {
+    setUploadingDocument(documentType);
+    setUploadError('');
+    try {
+      await removeClaimDocument(token, claim.id, documentType);
+      setDocumentValidation(current => {
+        const next = { ...current };
+        delete next[documentType];
+        return next;
+      });
+      setClaim(await getClaim(claim.id, token));
+      setPendingDocumentType(documentType);
+      fileRef.current?.click();
+    } catch {
+      setUploadError('Unable to replace this document right now. Please try again.');
+    } finally {
+      setUploadingDocument(null);
     }
   };
 
@@ -107,14 +149,19 @@ export default function ClaimDetails({ claimId, token, navigate }: ClaimDetailsP
             <div className="space-y-2">
               {claim.documents.map(doc => {
                 const effectiveStatus = doc.status;
+                const validation = documentValidation[doc.type];
                 return (
-                  <div key={doc.type} className={`flex items-center gap-3 p-3 rounded-lg border ${
+                  <div key={doc.type} className={`p-3 rounded-lg border ${
+                    validation?.status === 'valid' ? 'border-emerald-200 bg-emerald-50' :
+                    validation?.status === 'invalid' || validation?.status === 'failed' ? 'border-red-200 bg-red-50' :
+                    validation?.status === 'warning' ? 'border-amber-200 bg-amber-50' :
                     doc.status === 'VERIFIED' ? 'border-emerald-200 bg-emerald-50' :
                     doc.status === 'UPLOADED' ? 'border-blue-200 bg-blue-50' :
                     'border-amber-200 bg-amber-50'
                   }`}>
+                    <div className="flex items-center gap-3">
                     <div className="text-lg flex-shrink-0">
-                      {effectiveStatus === 'VERIFIED' ? '✅' : effectiveStatus === 'UPLOADED' ? '📄' : '📋'}
+                      {validation?.status === 'valid' ? '✅' : validation?.status === 'invalid' || validation?.status === 'failed' ? '❌' : effectiveStatus === 'VERIFIED' ? '✅' : effectiveStatus === 'UPLOADED' ? '📄' : '📋'}
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-semibold text-gray-800">{doc.type}</p>
@@ -126,7 +173,12 @@ export default function ClaimDetails({ claimId, token, navigate }: ClaimDetailsP
                       {doc.status === 'MISSING' && uploadingDocument !== doc.type && (
                         <Button size="sm" onClick={() => chooseDocument(doc.type)}>Upload</Button>
                       )}
+                      {(validation?.status === 'invalid' || validation?.status === 'failed') && uploadingDocument !== doc.type && (
+                        <Button size="sm" variant="outline" onClick={() => replaceDocument(doc.type)}>Replace</Button>
+                      )}
                     </div>
+                    </div>
+                    {validation && <DocumentValidationNotice validation={validation} />}
                   </div>
                 );
               })}
@@ -151,6 +203,7 @@ export default function ClaimDetails({ claimId, token, navigate }: ClaimDetailsP
           <Card className="p-4">
             <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Actions</p>
             <div className="space-y-2">
+              <Button className="w-full" loading={deciding} onClick={requestDecision}>Get claim decision</Button>
               <Button variant="outline" className="w-full" onClick={() => navigate('my-claims')}>
                 ← All Claims
               </Button>
@@ -163,6 +216,34 @@ export default function ClaimDetails({ claimId, token, navigate }: ClaimDetailsP
       </div>
     </div>
   );
+}
+
+function pendingValidation(expectedDocumentType: string): DocumentValidation {
+  return { status: 'pending', document_valid: null, message: 'Processing your document. This may take a moment.', errors: [], warnings: [], expected_document_type: expectedDocumentType, detected_document_type: null };
+}
+
+function parseValidationResults(value: string): Record<string, DocumentValidation> {
+  try {
+    const parsed = JSON.parse(value);
+    if (!Array.isArray(parsed)) return {};
+    return Object.fromEntries(parsed.filter(item => item && typeof item.documentType === 'string' && item.validation).map(item => [item.documentType, item.validation]));
+  } catch {
+    return {};
+  }
+}
+
+function failedValidation(expectedDocumentType: string, message: string): DocumentValidation {
+  return { status: 'failed', document_valid: false, message, errors: [], warnings: [], expected_document_type: expectedDocumentType, detected_document_type: null };
+}
+
+function DocumentValidationNotice({ validation }: { validation: DocumentValidation }) {
+  const color = validation.status === 'valid' ? 'text-emerald-800' : validation.status === 'invalid' || validation.status === 'failed' ? 'text-red-800' : validation.status === 'pending' ? 'text-blue-800' : 'text-amber-800';
+  return <div className={`mt-2 ml-8 text-xs ${color}`}>
+    <p className="font-semibold">{validation.message}</p>
+    {validation.status === 'invalid' && <div className="mt-1 space-y-0.5">{validation.errors.map(error => <p key={error}>{error}</p>)}<p>Please upload the correct document.</p></div>}
+    {validation.status === 'warning' && validation.warnings.map(warning => <p className="mt-1" key={warning}>{warning}</p>)}
+    {validation.status === 'failed' && <p className="mt-1">You can try again with a clearer file.</p>}
+  </div>;
 }
 
 function StatusPanel({ claim }: { claim: Claim }) {
@@ -318,6 +399,8 @@ function DecisionCard({ claim }: { claim: Claim }) {
   return (
     <Card className="p-4">
       <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Decision Details</p>
+      {claim.decision.outcome && <DataRow label="Final system decision" value={claim.decision.outcome.replaceAll('_', ' ')} />}
+      {claim.decision.reason && <p className="text-sm text-gray-600 mt-3">{claim.decision.reason}</p>}
       {claim.status === 'APPROVED' && (
         <div className="space-y-2">
           <DataRow label="Claimed" value={<Amount value={claim.claimedAmount} size="sm" />} />

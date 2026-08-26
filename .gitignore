@@ -5,4 +5,5 @@ venv/
 **/__pycache__/
 *.py[cod]
 backend/uploads/
+data/handbook_vector_store/
 *.log

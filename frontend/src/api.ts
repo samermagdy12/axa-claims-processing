@@ -42,12 +42,33 @@ export interface DocumentExtraction {
   extraction_confidence: number | null;
   extracted_at: string;
   reused: boolean;
+  validation: DocumentValidation;
+}
+
+export interface DocumentValidation {
+  status: 'valid' | 'invalid' | 'warning' | 'pending' | 'failed';
+  document_valid: boolean | null;
+  message: string;
+  errors: string[];
+  warnings: string[];
+  expected_document_type: string | null;
+  detected_document_type: string | null;
+}
+export interface FinalDecision {
+  claim_id: string;
+  llm_recommendation: 'settle' | 'request_documents' | 'reject' | 'route_to_human';
+  final_decision: 'settle' | 'request_documents' | 'reject' | 'route_to_human';
+  decision_source: 'business_rules'; auto_processed: boolean; human_review_required: boolean;
+  triggered_rules: { rule_id: string; outcome: string; reason: string }[];
+  reason: string; missing_documents: string[]; customer_message: string;
+  handbook_references: { chunk_id: string; rule_identifier?: string | null; section?: string | null }[];
 }
 
 type ApiClaim = {
   claim_id: string; policy_id: string; policy_number: string; product_line: Claim['productLine'];
   claim_type: string; incident_date: string; submission_date: string; claimed_amount: number;
   description: string | null; status: Claim['status'];
+  final_decision?: { final_decision: string; reason?: string | null; customer_message?: string | null; handbook_clause?: string | null } | null;
   required_documents?: { document_type: string; status: 'MISSING' | 'UPLOADED' | 'VERIFIED'; original_file_name?: string | null }[];
 };
 
@@ -83,7 +104,7 @@ function toClaim(claim: ApiClaim): Claim {
     productLine: claim.product_line, claimType: claim.claim_type, incidentDate: claim.incident_date,
     submissionDate: claim.submission_date, claimedAmount: Number(claim.claimed_amount),
     description: claim.description || '', status: claim.status, documents,
-    decision: claim.status === 'WAITING_FOR_DOCUMENTS' ? { outcome: 'WAITING_FOR_DOCUMENTS', missingDocuments: documents.filter(document => document.status === 'MISSING').map(document => document.type) } : undefined,
+    decision: claim.final_decision ? { outcome: claim.final_decision.final_decision, reason: claim.final_decision.reason || undefined, customerMessage: claim.final_decision.customer_message || undefined, handbookClause: claim.final_decision.handbook_clause || undefined, missingDocuments: documents.filter(document => document.status === 'MISSING').map(document => document.type) } : claim.status === 'WAITING_FOR_DOCUMENTS' ? { outcome: 'request_documents', missingDocuments: documents.filter(document => document.status === 'MISSING').map(document => document.type) } : undefined,
   };
 }
 export async function getMyPolicies(token: string): Promise<Policy[]> { return (await request<ApiPolicy[]>('/policies/my', { headers: { Authorization: `Bearer ${token}` } })).map(toPolicy); }
@@ -106,6 +127,12 @@ export function extractClaimDocument(token: string, claimId: string, documentId:
     method: 'POST',
     headers: { Authorization: `Bearer ${token}` },
   });
+}
+export function decideClaim(token: string, claimId: string): Promise<FinalDecision> {
+  return request<FinalDecision>(`/claims/${encodeURIComponent(claimId)}/decide`, { method: 'POST', headers: { Authorization: `Bearer ${token}` } });
+}
+export function removeClaimDocument(token: string, claimId: string, documentType: string): Promise<{ document_type: string; status: string }> {
+  return request(`/claims/${encodeURIComponent(claimId)}/documents/${encodeURIComponent(documentType)}`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } });
 }
 export function createClaim(token: string, data: { policyId: string; claimType: string; incidentDate: string; claimedAmount: number; description: string }) {
   return request<CreatedClaim>('/claims', { method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: JSON.stringify({ policy_id: data.policyId, claim_type: data.claimType, incident_date: data.incidentDate, claimed_amount: data.claimedAmount, description: data.description }) });

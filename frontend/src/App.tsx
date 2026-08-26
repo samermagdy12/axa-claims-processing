@@ -48,6 +48,7 @@ export default function App() {
       ...(params.processingDocuments !== undefined ? { processingDocuments: params.processingDocuments } : {}),
       ...(params.completedExtractions !== undefined ? { completedExtractions: params.completedExtractions } : {}),
       ...(params.processingFailures !== undefined ? { processingFailures: params.processingFailures } : {}),
+      ...(params.processingValidationResults !== undefined ? { processingValidationResults: params.processingValidationResults } : {}),
     }));
   };
 
@@ -61,7 +62,7 @@ export default function App() {
 
   const signOut = () => { localStorage.removeItem('axa_access_token'); setToken(null); setAppState(INITIAL_STATE); };
 
-  const { screen, role, userName, userEmail, selectedPolicyId, selectedClaimId, selectedAssessorClaimId, processingDocuments, completedExtractions, processingFailures } =
+  const { screen, role, userName, userEmail, selectedPolicyId, selectedClaimId, selectedAssessorClaimId, processingDocuments, completedExtractions, processingFailures, processingValidationResults } =
     appState;
 
   // ── Auth screens (no layout) ────────────────────────────────────────────────
@@ -97,6 +98,7 @@ export default function App() {
       documentsProcessed={Number(processingDocuments || 0)}
       extractionsCompleted={Number(completedExtractions || 0)}
       processingFailures={Number(processingFailures || 0)}
+      validationResults={processingValidationResults || '[]'}
       navigate={navigate}
     />;
   }
@@ -125,7 +127,7 @@ export default function App() {
             <NewClaim preselectedPolicyId={selectedPolicyId} token={token || ''} navigate={navigate} />
           )}
           {screen === 'claim-details' && (
-            <ClaimDetails claimId={selectedClaimId || ''} token={token || ''} navigate={navigate} />
+            <ClaimDetails claimId={selectedClaimId || ''} token={token || ''} initialValidationResults={processingValidationResults || '[]'} navigate={navigate} />
           )}
           {screen === 'profile' && <Profile userName={userName || 'Customer'} userEmail={userEmail || ''} token={token || ''} />}
         </>

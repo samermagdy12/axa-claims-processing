@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
+from datetime import date, datetime
 import re
 from typing import Any
 
@@ -43,6 +44,22 @@ def validate_document(expected_document_type: str, raw_text: str, structured_dat
     return {"expected_document_type": expected_document_type, "detected_document_type": expected_document_type if passed else detected_type, "validation_passed": passed, "confidence": min(1.0, score / 3), "reason": "Document content is consistent with the expected upload field." if passed else f"Document content appears to be {detected_type}, not {expected_document_type}."}
 
 
+def present_document_validation(validation: dict[str, Any] | None) -> dict[str, Any]:
+    """Return the existing validation decision in wording safe for customer UI."""
+    validation = validation or {}
+    expected = validation.get("expected_document_type")
+    detected = validation.get("detected_document_type")
+    passed = validation.get("validation_passed")
+    if passed is True:
+        return {"status": "valid", "document_valid": True, "message": f"{expected} uploaded successfully.", "errors": [], "warnings": [], "expected_document_type": expected, "detected_document_type": detected or expected}
+    if passed is False:
+        errors = [f"Expected: {expected}"]
+        if detected:
+            errors.append(f"Detected: {detected}")
+        return {"status": "invalid", "document_valid": False, "message": "The uploaded document does not match the required document type.", "errors": errors, "warnings": [], "expected_document_type": expected, "detected_document_type": detected}
+    return {"status": "warning", "document_valid": None, "message": f"Unable to fully verify this document. Please confirm it is the correct {expected}.", "errors": [], "warnings": [validation.get("reason") or "Some document information could not be verified."], "expected_document_type": expected, "detected_document_type": detected}
+
+
 def normalize_document_data(document_type: str, structured_data: dict[str, Any] | None) -> dict[str, Any]:
     data = structured_data if isinstance(structured_data, dict) else {}
     normalized: dict[str, Any] = {"document_type": document_type, "fields": {}}
@@ -55,14 +72,27 @@ def normalize_document_data(document_type: str, structured_data: dict[str, Any] 
 def check_cross_document_consistency(documents: list[dict[str, Any]]) -> dict[str, Any]:
     checks = []
     for field in _FIELD_ALIASES:
-        values: dict[str, list[str]] = defaultdict(list)
+        observations: list[tuple[Any, str, str]] = []
         for document in documents:
             value = ((document.get("normalized_data") or {}).get("fields") or {}).get(field)
             if value in (None, "", [], {}):
                 continue
-            values[_comparison_value(value)].append(str(document.get("document_id") or document.get("document_type") or "unknown"))
-        conflict = len(values) > 1
-        checks.append({"field": field, "values": [{"value": value, "document_ids": ids} for value, ids in values.items()], "matches": None if len(values) < 2 else not conflict, "conflict": conflict})
+            document_type = str(document.get("document_type") or "Unknown")
+            observations.append((value, str(document.get("document_id") or document_type), document_type))
+
+        # A canonical field name alone is not enough: for example, a licence
+        # expiry date and a policy expiry date are unrelated concepts.  Only
+        # compare fields shared by the same semantic document role.
+        comparable = _comparable_observations(field, observations)
+        groups: list[dict[str, Any]] = []
+        for value, document_id, _ in comparable:
+            matching_group = next((group for group in groups if _values_compatible(field, group["raw_value"], value)), None)
+            if matching_group:
+                matching_group["document_ids"].append(document_id)
+            else:
+                groups.append({"raw_value": value, "value": _display_value(value), "document_ids": [document_id]})
+        conflict = len(groups) > 1
+        checks.append({"field": field, "values": [{"value": group["value"], "document_ids": group["document_ids"]} for group in groups], "matches": None if len(comparable) < 2 else not conflict, "conflict": conflict})
     conflicts = [check for check in checks if check["conflict"]]
     return {"checks": checks, "has_conflicts": bool(conflicts), "conflicts": conflicts}
 
@@ -87,8 +117,47 @@ def build_claim_processing_summary(required_documents: list[dict[str, Any]], doc
     return {"outcome": outcome, "complete": not missing, "manual_review_required": manual_review, "required_documents": required_types, "uploaded_documents": uploaded_types, "missing_documents": missing, "invalid_documents": invalid, "duplicate_documents": duplicates, "consistency": consistency}
 
 
+def _comparable_observations(field: str, observations: list[tuple[Any, str, str]]) -> list[tuple[Any, str, str]]:
+    """Limit comparisons to values that mean the same thing across documents."""
+    if field in {"issue_date", "expiry_date", "licence_number", "registration_number"}:
+        # These attributes identify/describe a particular document, not the
+        # claim as a whole. Comparing them across document types is unsafe.
+        return []
+    if field == "vehicle_information":
+        return [item for item in observations if "vehicle" in item[2].casefold() or "registration" in item[2].casefold()]
+    return observations
+
+
+def _values_compatible(field: str, left: Any, right: Any) -> bool:
+    left_value, right_value = _comparison_value(left), _comparison_value(right)
+    if not left_value or not right_value:
+        return True
+    if left_value == right_value:
+        return True
+    # A make is compatible with a make/model, e.g. Toyota vs Toyota Corolla.
+    if field == "vehicle_information" and (left_value in right_value or right_value in left_value):
+        return True
+    return False
+
+
 def _comparison_value(value: Any) -> str:
+    if isinstance(value, dict):
+        meaningful = []
+        for key in ("make_model", "make", "model", "registration", "registration_number", "value"):
+            if value.get(key) not in (None, "", [], {}):
+                meaningful.append(_comparison_value(value[key]))
+        return " ".join(part for part in meaningful if part)
+    if isinstance(value, (list, tuple, set)):
+        return " ".join(sorted(_comparison_value(item) for item in value))
+    if isinstance(value, (date, datetime)):
+        return value.isoformat()
     return re.sub(r"\s+", " ", str(value).strip()).casefold()
+
+
+def _display_value(value: Any) -> str:
+    if isinstance(value, dict):
+        return _comparison_value(value)
+    return str(value).strip()
 
 
 def _document_profile(document_type: str) -> str | None:

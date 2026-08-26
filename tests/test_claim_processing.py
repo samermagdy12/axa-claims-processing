@@ -1,6 +1,6 @@
 import unittest
 
-from app.claim_processing import build_claim_processing_summary, normalize_document_data, validate_document
+from app.claim_processing import build_claim_processing_summary, check_cross_document_consistency, normalize_document_data, present_document_validation, validate_document
 
 
 class ClaimProcessingTests(unittest.TestCase):
@@ -49,6 +49,30 @@ class ClaimProcessingTests(unittest.TestCase):
         )
         self.assertEqual(summary["outcome"], "manual_review_required")
         self.assertEqual(summary["missing_documents"], [])
+
+    def test_validation_presentation_is_safe_and_user_friendly(self):
+        invalid = present_document_validation({"expected_document_type": "Driver's Licence", "detected_document_type": "Repair Estimate", "validation_passed": False})
+        self.assertEqual(invalid["status"], "invalid")
+        self.assertFalse(invalid["document_valid"])
+        self.assertEqual(invalid["errors"], ["Expected: Driver's Licence", "Detected: Repair Estimate"])
+
+        warning = present_document_validation({"expected_document_type": "Driver's Licence", "validation_passed": None, "reason": "Text could not be classified."})
+        self.assertEqual(warning["status"], "warning")
+        self.assertEqual(warning["warnings"], ["Text could not be classified."])
+
+    def test_vehicle_make_and_make_model_are_compatible(self):
+        result = check_cross_document_consistency([
+            {"document_id": "a", "document_type": "Vehicle Registration", "normalized_data": {"fields": {"vehicle_information": "Toyota"}}},
+            {"document_id": "b", "document_type": "Vehicle Registration", "normalized_data": {"fields": {"vehicle_information": {"make_model": "Toyota Corolla", "registration": "ABC-1234"}}}},
+        ])
+        self.assertFalse(result["has_conflicts"])
+
+    def test_unrelated_document_expiry_dates_are_not_compared(self):
+        result = check_cross_document_consistency([
+            {"document_id": "licence", "document_type": "Driver's Licence", "normalized_data": {"fields": {"expiry_date": "2030-01-01"}}},
+            {"document_id": "policy", "document_type": "Policy Certificate", "normalized_data": {"fields": {"expiry_date": "2026-12-31"}}},
+        ])
+        self.assertFalse(result["has_conflicts"])
 
 
 if __name__ == "__main__":

@@ -90,6 +90,7 @@ class CustomerClaimResponse(BaseModel):
     description: str | None
     status: str
     required_documents: list[RequiredDocumentResponse] = Field(default_factory=list)
+    final_decision: dict | None = None
 
 
 class ClaimDocumentUploadResponse(BaseModel):
@@ -112,6 +113,7 @@ class DocumentExtractionResponse(BaseModel):
     strategy: str
     raw_text: str
     structured_data: dict = Field(default_factory=dict)
+    validation: dict = Field(default_factory=dict)
     text_length: int
     extraction_confidence: Decimal | None
     extracted_at: datetime

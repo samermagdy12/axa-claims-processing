@@ -7,13 +7,17 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.auth import ASSESSOR_ROLE, CUSTOMER_ROLE, OPERATIONS_ROLE, create_access_token, get_current_user, hash_password, require_roles, verify_password
+from app.claim_analysis import analyze_claim_context, build_claim_context
+from app.claim_analysis_llm import ClaimAnalysisError
+from app.decision_engine import decide_claim
 from app.claim_requirements import get_required_documents
-from app.claim_processing import build_claim_processing_summary, normalize_document_data, validate_document
+from app.claim_processing import build_claim_processing_summary, normalize_document_data, present_document_validation, validate_document
 from app.config import settings
 from app.database import get_db
 from app.document_extraction import DocumentExtractionError, extract_document_content
 from app.structured_extraction import extract_structured_data
 from app.document_upload import store_claim_document
+from app.handbook_knowledge import HandbookKnowledgeError
 from app.schemas import AuthResponse, ClaimCreateRequest, ClaimCreateResponse, ClaimDocumentUploadResponse, CustomerClaimResponse, DocumentExtractionResponse, LoginRequest, PolicyResponse, PolicyVerificationRequest, RegisterRequest
 
 
@@ -123,15 +127,21 @@ def get_my_claims(current_user: dict = Depends(require_roles(CUSTOMER_ROLE)), db
         text("""
             SELECT c.claim_id, c.policy_id, p.policy_number, p.product_line,
                    c.claim_type, c.incident_date, c.submission_date,
-                   c.claimed_amount, c.description, c.status
+                   c.claimed_amount, c.description, c.status,
+                   latest_decision.outcome AS final_decision, latest_decision.reason AS decision_reason,
+                   latest_decision.customer_message, latest_decision.handbook_clause
             FROM claims c
             JOIN policies p ON p.policy_id = c.policy_id
+            LEFT JOIN LATERAL (
+                SELECT outcome, reason, customer_message, handbook_clause FROM decisions
+                WHERE claim_id = c.claim_id ORDER BY created_at DESC LIMIT 1
+            ) latest_decision ON TRUE
             WHERE p.user_id = :user_id
             ORDER BY c.submission_date DESC, c.created_at DESC
         """),
         {"user_id": current_user["user_id"]},
     ).mappings().all()
-    return [dict(claim) for claim in claims]
+    return [_claim_response(dict(claim)) for claim in claims]
 
 
 @app.get("/claims/{claim_id}", response_model=CustomerClaimResponse)
@@ -140,9 +150,15 @@ def get_claim(claim_id: str, current_user: dict = Depends(require_roles(CUSTOMER
         text("""
             SELECT c.claim_id, c.policy_id, p.policy_number, p.product_line,
                    c.claim_type, c.incident_date, c.submission_date,
-                   c.claimed_amount, c.description, c.status
+                   c.claimed_amount, c.description, c.status,
+                   latest_decision.outcome AS final_decision, latest_decision.reason AS decision_reason,
+                   latest_decision.customer_message, latest_decision.handbook_clause
             FROM claims c
             JOIN policies p ON p.policy_id = c.policy_id
+            LEFT JOIN LATERAL (
+                SELECT outcome, reason, customer_message, handbook_clause FROM decisions
+                WHERE claim_id = c.claim_id ORDER BY created_at DESC LIMIT 1
+            ) latest_decision ON TRUE
             WHERE c.claim_id = :claim_id AND p.user_id = :user_id
         """),
         {"claim_id": claim_id, "user_id": current_user["user_id"]},
@@ -166,7 +182,7 @@ def get_claim(claim_id: str, current_user: dict = Depends(require_roles(CUSTOMER
         """),
         {"claim_id": claim_id},
     ).mappings().all()
-    return {**dict(claim), "required_documents": [dict(document) for document in required_documents]}
+    return {**_claim_response(dict(claim)), "required_documents": [dict(document) for document in required_documents]}
 
 
 @app.post("/claims/{claim_id}/documents", response_model=ClaimDocumentUploadResponse, status_code=status.HTTP_201_CREATED)
@@ -242,6 +258,40 @@ async def upload_claim_document(
             destination.unlink()
         raise
     return {**dict(uploaded_document), "required_document": dict(required_document), "claim_status": claim_status}
+
+
+@app.delete("/claims/{claim_id}/documents/{document_type:path}")
+def remove_claim_document(claim_id: str, document_type: str, current_user: dict = Depends(get_current_user), db: Session = Depends(get_db)):
+    if current_user["role_name"] != CUSTOMER_ROLE:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only customers can replace claim documents")
+    claim = db.execute(
+        text("SELECT c.claim_id, p.user_id FROM claims c JOIN policies p ON p.policy_id = c.policy_id WHERE c.claim_id = :claim_id"),
+        {"claim_id": claim_id},
+    ).mappings().first()
+    if claim is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Claim not found")
+    if claim["user_id"] != current_user["user_id"]:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You do not have access to this claim")
+    document = db.execute(
+        text("SELECT document_id, document_url FROM claim_documents WHERE claim_id = :claim_id AND document_type = :document_type ORDER BY uploaded_at DESC LIMIT 1"),
+        {"claim_id": claim_id, "document_type": document_type},
+    ).mappings().first()
+    if document is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
+    try:
+        db.execute(text("DELETE FROM claim_extractions WHERE claim_id = :claim_id AND extracted_data ->> 'document_id' = :document_id"), {"claim_id": claim_id, "document_id": str(document["document_id"])})
+        db.execute(text("DELETE FROM claim_documents WHERE document_id = :document_id"), {"document_id": document["document_id"]})
+        db.execute(text("UPDATE claim_required_documents SET status = 'MISSING', updated_at = CURRENT_TIMESTAMP WHERE claim_id = :claim_id AND document_type = :document_type"), {"claim_id": claim_id, "document_type": document_type})
+        db.execute(text("UPDATE claims SET status = 'WAITING_FOR_DOCUMENTS', updated_at = CURRENT_TIMESTAMP WHERE claim_id = :claim_id"), {"claim_id": claim_id})
+        db.execute(text("INSERT INTO audit_logs (claim_id, user_id, action, details) VALUES (:claim_id, :user_id, 'DOCUMENT_REMOVED', CAST(:details AS JSONB))"), {"claim_id": claim_id, "user_id": current_user["user_id"], "details": json.dumps({"document_id": str(document["document_id"]), "document_type": document_type})})
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    document_path = (Path(settings.UPLOAD_DIR).resolve() / document["document_url"]).resolve()
+    if document_path.is_relative_to(Path(settings.UPLOAD_DIR).resolve()) and document_path.is_file():
+        document_path.unlink()
+    return {"document_type": document_type, "status": "removed"}
 
 
 @app.post("/claims/{claim_id}/documents/{document_id}/extract", response_model=DocumentExtractionResponse)
@@ -330,6 +380,7 @@ def _document_extraction_response(extraction: dict, reused: bool) -> dict:
         "strategy": data["processing_strategy"],
         "raw_text": data.get("raw_extraction", {}).get("text", data.get("extracted_text", "")),
         "structured_data": data.get("structured_data", {}),
+        "validation": present_document_validation(data.get("document_validation")),
         "text_length": data["text_length"],
         "extraction_confidence": extraction["extraction_confidence"],
         "extracted_at": extraction["extracted_at"],
@@ -375,6 +426,115 @@ def get_claim_processing_summary(claim_id: str, current_user: dict = Depends(get
             continue
         documents.append({"document_id": data.get("document_id"), "document_type": data.get("document_type"), "normalized_data": data.get("normalized_data") or normalize_document_data(data.get("document_type", "Unknown"), data.get("structured_data")), "validation": data.get("document_validation") or validate_document(data.get("document_type", "Unknown"), data.get("extracted_text", ""), data.get("structured_data"))})
     return build_claim_processing_summary(required_documents, documents)
+
+
+@app.post("/claims/{claim_id}/analyze")
+def analyze_claim(claim_id: str, current_user: dict = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Explicitly run the handbook-grounded, provider-fallback claim analysis."""
+    if current_user["role_name"] not in {CUSTOMER_ROLE, ASSESSOR_ROLE, OPERATIONS_ROLE}:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You do not have access to claim analysis")
+    claim = db.execute(
+        text("""SELECT c.claim_id, c.policy_id, c.claim_type, c.incident_date, c.submission_date,
+                       c.claimed_amount, c.description, c.status, p.user_id, p.policy_number,
+                       p.product_line, p.status AS policy_status, p.start_date, p.end_date,
+                       p.annual_limit, p.remaining_limit, p.deductible, p.riders
+                FROM claims c JOIN policies p ON p.policy_id = c.policy_id
+                WHERE c.claim_id = :claim_id"""),
+        {"claim_id": claim_id},
+    ).mappings().first()
+    if claim is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Claim not found")
+    if current_user["role_name"] == CUSTOMER_ROLE and claim["user_id"] != current_user["user_id"]:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You do not have access to this claim")
+    required_documents = [dict(row) for row in db.execute(
+        text("SELECT document_type, is_required, status FROM claim_required_documents WHERE claim_id = :claim_id ORDER BY created_at, document_type"),
+        {"claim_id": claim_id},
+    ).mappings().all()]
+    uploaded_documents = [dict(row) for row in db.execute(
+        text("SELECT document_id, document_type FROM claim_documents WHERE claim_id = :claim_id ORDER BY uploaded_at"),
+        {"claim_id": claim_id},
+    ).mappings().all()]
+    extraction_rows = db.execute(
+        text("SELECT extracted_data FROM claim_extractions WHERE claim_id = :claim_id ORDER BY extracted_at"),
+        {"claim_id": claim_id},
+    ).mappings().all()
+    extractions = {}
+    for row in extraction_rows:
+        data = row["extracted_data"]
+        data = json.loads(data) if isinstance(data, str) else data
+        if isinstance(data, dict) and data.get("document_id"):
+            extractions[str(data["document_id"])] = data
+    documents = []
+    processing_documents = []
+    for document in uploaded_documents:
+        extraction = extractions.get(str(document["document_id"]), {})
+        validation = extraction.get("document_validation") or {"expected_document_type": document["document_type"], "detected_document_type": None, "validation_passed": None, "reason": "Document has not been extracted yet."}
+        documents.append({**document, "extraction": extraction, "validation": validation})
+        processing_documents.append({"document_id": str(document["document_id"]), "document_type": document["document_type"], "normalized_data": extraction.get("normalized_data") or normalize_document_data(document["document_type"], extraction.get("structured_data")), "validation": validation})
+    processing = build_claim_processing_summary(required_documents, processing_documents)
+    claim_data = dict(claim)
+    policy = {
+        "policy_id": claim_data["policy_id"], "policy_number": claim_data["policy_number"], "product_line": claim_data["product_line"],
+        "status": claim_data["policy_status"], "start_date": claim_data["start_date"], "end_date": claim_data["end_date"],
+        "annual_limit": claim_data["annual_limit"], "remaining_limit": claim_data["remaining_limit"], "deductible": claim_data["deductible"], "riders": claim_data["riders"],
+    }
+    try:
+        analysis = analyze_claim_context(build_claim_context(claim_data, policy, documents, processing))
+    except (HandbookKnowledgeError, ClaimAnalysisError) as exc:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
+    return {"claim_id": str(claim_id), "processing": processing, **analysis}
+
+
+@app.post("/claims/{claim_id}/decide")
+def decide_claim_endpoint(claim_id: str, current_user: dict = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Run RAG analysis once, then enforce the deterministic final decision."""
+    analysis_result = analyze_claim(claim_id, current_user, db)
+    claim = db.execute(
+        text("""SELECT c.claim_id, c.claimed_amount, p.status AS policy_status
+                 FROM claims c JOIN policies p ON p.policy_id = c.policy_id
+                 WHERE c.claim_id = :claim_id"""), {"claim_id": claim_id}
+    ).mappings().first()
+    if claim is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Claim not found")
+    result = decide_claim(
+        claim=dict(claim), policy={"status": claim["policy_status"]},
+        processing=analysis_result["processing"], analysis=analysis_result,
+    )
+    claim_status = {"settle": "APPROVED", "request_documents": "WAITING_FOR_DOCUMENTS", "reject": "REJECTED", "route_to_human": "UNDER_HUMAN_REVIEW"}[result["final_decision"]]
+    handbook_clause = next((reference.get("rule_identifier") for reference in result["handbook_references"] if reference.get("rule_identifier")), None)
+    try:
+        db.execute(text("UPDATE claims SET status = :status, updated_at = CURRENT_TIMESTAMP WHERE claim_id = :claim_id"), {"status": claim_status, "claim_id": claim_id})
+        db.execute(text("""INSERT INTO decisions (claim_id, outcome, reason, handbook_clause, risk_detected, risk_reason, customer_message)
+                         VALUES (:claim_id, :outcome, :reason, :handbook_clause, :risk_detected, :risk_reason, :customer_message)"""), {
+            "claim_id": claim_id, "outcome": result["final_decision"], "reason": result["reason"], "handbook_clause": handbook_clause,
+            "risk_detected": result["human_review_required"], "risk_reason": result["reason"] if result["human_review_required"] else None,
+            "customer_message": result["customer_message"],
+        })
+        db.execute(text("""INSERT INTO audit_logs (claim_id, user_id, action, details)
+                         VALUES (:claim_id, :user_id, 'FINAL_DECISION', CAST(:details AS jsonb))"""), {
+            "claim_id": claim_id, "user_id": current_user["user_id"], "details": json.dumps(result, default=str),
+        })
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    return {"claim_id": str(claim_id), **result}
+
+
+def _claim_response(claim: dict) -> dict:
+    final = claim.pop("final_decision", None)
+    if final:
+        claim["final_decision"] = {
+            "final_decision": final,
+            "reason": claim.pop("decision_reason", None),
+            "customer_message": claim.pop("customer_message", None),
+            "handbook_clause": claim.pop("handbook_clause", None),
+        }
+    else:
+        claim.pop("decision_reason", None)
+        claim.pop("customer_message", None)
+        claim.pop("handbook_clause", None)
+    return claim
 
 
 @app.post("/claims", response_model=ClaimCreateResponse, status_code=status.HTTP_201_CREATED)

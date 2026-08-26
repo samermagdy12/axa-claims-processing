@@ -19,3 +19,4 @@ paddlex[ocr]==3.7.2
 pypdfium2==5.12.1
 groq
 httpx
+chromadb

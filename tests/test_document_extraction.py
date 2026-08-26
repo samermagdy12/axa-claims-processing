@@ -29,6 +29,16 @@ class Result:
         return self.value
 
 
+class StubStructurePipeline:
+    def __init__(self, payload):
+        self.payload = payload
+        self.inputs = []
+
+    def predict(self, image):
+        self.inputs.append(image)
+        return [self.payload]
+
+
 class ExtractionDatabase:
     def __init__(self, owner_id, upload_root):
         self.owner_id = owner_id
@@ -372,22 +382,50 @@ Total Amount: EGP 1140""")
         self.assertIn("EGP 7,500", result.text)
         self.assertEqual(result.confidence, 1.0)
 
-    def test_ocr_extracts_text_from_the_documented_sample_image(self):
+    def test_native_pdf_text_bypasses_document_ocr(self):
+        with patch("app.document_extraction._extract_pdf_text", return_value="Report Number: PR-100") as native, patch("app.document_extraction._extract_scanned_pdf_text") as scanned:
+            result = extract_document_content(Path("report.pdf"), "application/pdf", "Police Report")
+        self.assertEqual(result.strategy, "native_pdf_text")
+        self.assertEqual(result.text, "Report Number: PR-100")
+        native.assert_called_once()
+        scanned.assert_not_called()
+
+    def test_paddle_document_pipeline_extracts_english_text_and_structure(self):
         sample = Path(__file__).resolve().parents[1] / "data" / "AXA_capstone_data" / "sample_documents" / "CLM-001.jpg"
-        result = extract_document_content(sample, "image/jpeg", "Repair Estimate")
+        english = StubStructurePipeline({"res": {"doc_preprocessor_res": {"angle": 0}, "layout_det_res": {"boxes": [{"label": "text", "score": 0.99, "coordinate": [0, 0, 200, 40]}]}, "overall_ocr_res": {"rec_texts": ["CLM-001", "Estimate Number: EST-100"], "rec_scores": [0.98, 0.96], "rec_polys": [[[0, 0], [100, 0], [100, 20], [0, 20]], [[0, 30], [200, 30], [200, 50], [0, 50]]]}}})
+        arabic = StubStructurePipeline({"res": {"overall_ocr_res": {"rec_texts": [], "rec_scores": [], "rec_polys": []}}})
+        with patch("app.document_extraction._ocr_pipelines", return_value=(("english", english), ("arabic", arabic))):
+            result = extract_document_content(sample, "image/jpeg", "Repair Estimate")
         self.assertEqual(result.strategy, "image_ocr")
         self.assertIn("CLM-001", result.text)
         self.assertGreater(result.confidence or 0, 0)
+        self.assertEqual(result.structure["pages"][0]["orientation"], 0)
+        self.assertEqual(result.structure["pages"][0]["layout"][0]["type"], "text")
+        self.assertEqual(len(english.inputs), 1)
 
-    def test_ocr_extracts_text_from_a_scanned_pdf(self):
+    def test_paddle_document_pipeline_processes_scanned_pdf(self):
         sample = Path(__file__).resolve().parents[1] / "data" / "AXA_capstone_data" / "sample_documents" / "CLM-001.jpg"
+        english = StubStructurePipeline({"res": {"overall_ocr_res": {"rec_texts": ["CLM-001"], "rec_scores": [0.9], "rec_polys": [[[0, 0], [100, 0], [100, 20], [0, 20]]]}}})
+        arabic = StubStructurePipeline({"res": {"overall_ocr_res": {"rec_texts": [], "rec_scores": [], "rec_polys": []}}})
         with TemporaryDirectory() as directory:
             path = Path(directory) / "scan.pdf"
             with Image.open(sample) as image:
                 image.convert("RGB").save(path, "PDF")
-            result = extract_document_content(path, "application/pdf", "Repair Estimate")
+            with patch("app.document_extraction._ocr_pipelines", return_value=(("english", english), ("arabic", arabic))):
+                result = extract_document_content(path, "application/pdf", "Repair Estimate")
         self.assertEqual(result.strategy, "scanned_pdf_ocr")
         self.assertIn("CLM-001", result.text)
+
+    def test_paddle_document_pipeline_preserves_arabic_and_mixed_text_reading_order(self):
+        english = StubStructurePipeline({"res": {"overall_ocr_res": {"rec_texts": ["Policy Number: POL-88"], "rec_scores": [0.95], "rec_polys": [[[0, 30], [200, 30], [200, 50], [0, 50]]]}}})
+        arabic = StubStructurePipeline({"res": {"overall_ocr_res": {"rec_texts": ["رقم الوثيقة"], "rec_scores": [0.93], "rec_polys": [[[0, 0], [150, 0], [150, 20], [0, 20]]]}}})
+        with TemporaryDirectory() as directory:
+            path = Path(directory) / "mixed.png"
+            Image.new("RGB", (20, 20), "white").save(path)
+            with patch("app.document_extraction._ocr_pipelines", return_value=(("english", english), ("arabic", arabic))):
+                result = extract_document_content(path, "image/png", "Member ID")
+        self.assertEqual(result.text.splitlines(), ["رقم الوثيقة", "Policy Number: POL-88"])
+        self.assertEqual(result.structure["reading_order"], "top_to_bottom_left_to_right")
 
     def test_visual_evidence_is_preserved_without_misrepresenting_ocr(self):
         result = extract_document_content(Path("photo.jpg"), "image/jpeg", "Photos of Damage")

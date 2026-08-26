@@ -37,4 +37,9 @@ def analyze_claim_context(claim_context: dict[str, Any], retriever: HandbookRetr
 
 def _reference(result: dict[str, Any]) -> dict[str, Any]:
     metadata = result.get("metadata") or {}
-    return {"chunk_id": result.get("chunk_id"), "rule_identifier": metadata.get("rule_identifier"), "section": metadata.get("section"), "source": metadata.get("source"), "score": result.get("score")}
+    return {
+        "chunk_id": result.get("chunk_id"), "rule_identifier": metadata.get("rule_identifier"),
+        "section": metadata.get("section"), "source": metadata.get("source"),
+        "rule_category": metadata.get("rule_category", "OTHER"),
+        "applies_to_products": metadata.get("applies_to_products", "ALL"), "score": result.get("score"),
+    }

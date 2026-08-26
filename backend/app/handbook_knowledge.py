@@ -22,6 +22,12 @@ class HandbookChunk:
     metadata: dict[str, Any]
 
 
+RULE_CATEGORIES = frozenset({
+    "DOCUMENT_REQUIREMENT", "POLICY_VALIDATION", "COVERAGE", "EXCLUSION",
+    "LIMIT", "RISK", "FRAUD", "HUMAN_REVIEW", "SETTLEMENT", "OTHER",
+})
+
+
 class VectorStore(Protocol):
     def upsert(self, chunks: list[HandbookChunk], embeddings: list[list[float]]) -> None: ...
 
@@ -81,6 +87,7 @@ def chunk_handbook_text(text: str, source: str, page_by_text: dict[str, int] | N
             if not content:
                 continue
             item_metadata = {"source": source, **metadata}
+            item_metadata.update(_rule_metadata(content, item_metadata))
             if page_by_text:
                 page = page_by_text.get(content)
                 if page is not None:
@@ -91,7 +98,9 @@ def chunk_handbook_text(text: str, source: str, page_by_text: dict[str, int] | N
 
 
 def _has_substantive_content(lines: list[str]) -> bool:
-    return any(line.strip() and not _heading(line) and not _clause_identifier(line) for line in lines)
+    # Handbook clauses commonly put their complete rule on the same line as
+    # the clause label.  That line is substantive content, not just a marker.
+    return any(line.strip() and not _heading(line) for line in lines)
 
 
 def _read_handbook_file(path: Path) -> tuple[str, dict[str, int] | None]:
@@ -137,6 +146,37 @@ def _split_section(section: str, max_chunk_chars: int) -> list[str]:
     if current:
         chunks.append("\n\n".join(current))
     return chunks
+
+
+def _rule_metadata(content: str, context: dict[str, Any]) -> dict[str, str]:
+    """Classify a clause at ingestion so retrieval cannot blur rule purposes.
+
+    This is deliberately conservative: an ambiguous rule is OTHER and therefore
+    cannot independently authorize a rejection or settlement.
+    """
+    text = f"{context.get('chapter', '')} {context.get('section', '')} {content}".casefold()
+    source = Path(str(context.get("source", ""))).stem.casefold()
+    product = next((name for name in ("health", "motor", "property", "travel") if name in source or name in text), "")
+    products = "ALL" if "universal exclusion" in text or "general rules" in text else (product.upper() if product else "ALL")
+    if any(term in text for term in ("auto-approve", "auto-approval", "approval authority")):
+        category = "SETTLEMENT"
+    elif "required document" in text or "document" in text and any(term in text for term in ("invoice", "report", "receipt", "photograph", "licence", "registration")):
+        category = "DOCUMENT_REQUIREMENT"
+    elif any(term in text for term in ("fraud", "duplicate", "attempted override")):
+        category = "FRAUD" if "fraud" in text else "RISK"
+    elif any(term in text for term in ("route to a human", "human assessor", "specialist review")):
+        category = "HUMAN_REVIEW"
+    elif any(term in text for term in ("annual limit", "sub-limit", "deductible", "above egp", "cap")):
+        category = "LIMIT"
+    elif any(term in text for term in ("policy not in force", "policy period", "policy is active", "waiting period")):
+        category = "POLICY_VALIDATION"
+    elif any(term in text for term in ("excluded", "not covered", "no cover", "rejected under this clause")):
+        category = "EXCLUSION"
+    elif any(term in text for term in ("cover includes", "is covered", "cover applies")):
+        category = "COVERAGE"
+    else:
+        category = "OTHER"
+    return {"rule_category": category, "applies_to_products": products}
 
 
 class ChromaHandbookVectorStore:

@@ -523,25 +523,34 @@ def _run_automatic_pipeline(claim_id: str, current_user: dict, db: Session) -> d
     """Persist the deterministic lifecycle after documents are extracted."""
     analysis_result = analyze_claim(claim_id, current_user, db)
     claim = db.execute(
-        text("""SELECT c.claim_id, c.claimed_amount, p.status AS policy_status
+        text("""SELECT c.claim_id, c.claimed_amount, p.status AS policy_status, p.product_line
                  FROM claims c JOIN policies p ON p.policy_id = c.policy_id
                  WHERE c.claim_id = :claim_id"""), {"claim_id": claim_id}
     ).mappings().first()
     if claim is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Claim not found")
-    result = decide_claim(
-        claim=dict(claim), policy={"status": claim["policy_status"]},
-        processing=analysis_result["processing"], analysis=analysis_result,
-    )
+    duplicate_detection = _detect_duplicate_claim(claim_id, db)
+    policy_for_decision = {
+        "status": claim["policy_status"],
+        "product_line": claim["product_line"],
+        "remaining_limit": analysis_result.get("policy", {}).get("remaining_limit"),
+        "validation_passed": (analysis_result.get("policy_validation") or {}).get("passed", False),
+    }
+    # The analysis response deliberately exposes only policy-validation state;
+    # load the actual remaining limit for deterministic settlement gating.
+    policy_row = db.execute(text("SELECT remaining_limit FROM policies p JOIN claims c ON c.policy_id = p.policy_id WHERE c.claim_id = :claim_id"), {"claim_id": claim_id}).mappings().first()
+    policy_for_decision["remaining_limit"] = policy_row["remaining_limit"] if policy_row else None
+    result = decide_claim(claim=dict(claim), policy=policy_for_decision, processing=analysis_result["processing"], analysis=analysis_result, duplicate_detection=duplicate_detection)
     claim_status = {"settle": "APPROVED", "request_documents": "WAITING_FOR_DOCUMENTS", "reject": "REJECTED", "route_to_human": "UNDER_HUMAN_REVIEW"}[result["final_decision"]]
     handbook_clause = next((reference.get("rule_identifier") for reference in result["handbook_references"] if reference.get("rule_identifier")), None)
     try:
+        triggered = {rule["rule_id"] for rule in result["triggered_rules"]}
         stage_state = {
             "required_documents": "blocked" if result["final_decision"] == "request_documents" else "completed",
-            "policy_validation": "completed" if result["final_decision"] != "request_documents" else "waiting",
-            "coverage_check": "completed" if result["final_decision"] != "request_documents" else "waiting",
-            "risk_check": "completed" if result["final_decision"] != "request_documents" else "waiting",
-            "decision": "completed" if result["final_decision"] != "request_documents" else "waiting",
+            "policy_validation": "failed" if "POLICY_VALIDATION_FAILED" in triggered else "completed" if result["final_decision"] != "request_documents" else "waiting",
+            "coverage_check": "failed" if "COVERAGE_EXCLUSION_SUPPORTED" in triggered else "completed" if result["final_decision"] != "request_documents" else "waiting",
+            "risk_check": "review_required" if result["human_review_required"] else "completed" if result["final_decision"] != "request_documents" else "waiting",
+            "decision": "completed",
             "policy_validation_detail": analysis_result.get("policy_validation"),
         }
         db.execute(text("UPDATE claims SET status = :status, updated_at = CURRENT_TIMESTAMP WHERE claim_id = :claim_id"), {"status": claim_status, "claim_id": claim_id})
@@ -572,6 +581,22 @@ def _incident_within_policy(incident_date, start_date, end_date) -> bool:
         return date.fromisoformat(str(start_date)[:10]) <= incident <= date.fromisoformat(str(end_date)[:10])
     except (TypeError, ValueError):
         return False
+
+
+def _detect_duplicate_claim(claim_id: str, db: Session) -> dict[str, bool]:
+    """Check actual prior claims, not merely duplicate uploaded document types."""
+    duplicate = db.execute(text("""
+        SELECT EXISTS(
+          SELECT 1 FROM claims candidate
+          JOIN claims current_claim ON current_claim.claim_id = :claim_id
+          WHERE candidate.claim_id <> current_claim.claim_id
+            AND candidate.policy_id = current_claim.policy_id
+            AND candidate.claim_type = current_claim.claim_type
+            AND candidate.incident_date = current_claim.incident_date
+            AND candidate.claimed_amount = current_claim.claimed_amount
+        ) AS duplicate_detected
+    """), {"claim_id": claim_id}).mappings().first()
+    return {"duplicate_detected": bool(duplicate and duplicate["duplicate_detected"])}
 
 
 def _claim_response(claim: dict) -> dict:

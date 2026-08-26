@@ -36,6 +36,16 @@ class HandbookRagTests(unittest.TestCase):
         self.assertEqual(chunks[0].metadata["section"], "General Rules")
         self.assertEqual(chunks[0].metadata["rule_identifier"], "0.2")
 
+    def test_ingestion_classifies_document_and_exclusion_rules(self):
+        documents = load_handbook_chunks(Path("data/AXA_capstone_data/policy_handbook/20_motor.md"))
+        document_chunk = next(chunk for chunk in documents if chunk.metadata.get("rule_identifier") == "2.10")
+        self.assertEqual(document_chunk.metadata["rule_category"], "DOCUMENT_REQUIREMENT")
+        self.assertEqual(document_chunk.metadata["applies_to_products"], "MOTOR")
+        exclusions = load_handbook_chunks(Path("data/AXA_capstone_data/policy_handbook/50_exclusions_general.md"))
+        exclusion_chunk = next(chunk for chunk in exclusions if chunk.metadata.get("rule_identifier") == "5.1")
+        self.assertEqual(exclusion_chunk.metadata["rule_category"], "EXCLUSION")
+        self.assertEqual(exclusion_chunk.metadata["applies_to_products"], "ALL")
+
     def test_retrieval_uses_focused_claim_context(self):
         context = {"claim": {"claim_type": "Collision", "claimed_amount": "7500", "description": "rear bumper damage"}, "policy": {"product_line": "Motor", "riders": []}, "documents": [{"document_type": "Repair Estimate"}], "processing": {"outcome": "ready_for_processing", "missing_documents": []}}
         retrieved = HandbookRetriever(FakeStore(), FakeEmbedder()).retrieve(context)

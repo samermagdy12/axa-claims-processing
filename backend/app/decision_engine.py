@@ -24,7 +24,9 @@ def decide_claim(*, claim: dict[str, Any], policy: dict[str, Any], processing: d
     if invalid:
         rules.append(_rule("INVALID_DOCUMENTS", "request_documents", "One or more uploaded documents do not match the required document type."))
 
-    if _supported_exclusion(analysis):
+    if not _policy_is_valid(policy):
+        rules.append(_rule("POLICY_VALIDATION_FAILED", "reject", "The policy is inactive or does not cover the incident date."))
+    elif _supported_exclusion(analysis, policy):
         rules.append(_rule("COVERAGE_EXCLUSION_SUPPORTED", "reject", "The claim is clearly excluded or not covered by the retrieved policy terms."))
 
     amount = _decimal(claim.get("claimed_amount"))
@@ -38,8 +40,8 @@ def decide_claim(*, claim: dict[str, Any], policy: dict[str, Any], processing: d
         rules.append(_rule("RISK_SIGNAL", "route_to_human", "This claim requires specialist review."))
     if processing.get("manual_review_required"):
         rules.append(_rule("MANUAL_REVIEW_REQUIRED", "route_to_human", "The available document information requires specialist review."))
-    if policy and str(policy.get("status") or "").upper() != "ACTIVE":
-        rules.append(_rule("POLICY_VALIDATION_FAILED", "route_to_human", "Policy eligibility requires specialist review."))
+    if amount is not None and _decimal(policy.get("remaining_limit")) is not None and _decimal(policy.get("remaining_limit")) < amount:
+        rules.append(_rule("INSUFFICIENT_REMAINING_LIMIT", "route_to_human", "The claim amount exceeds the policy's remaining limit."))
     if analysis.get("recommendation") == "route_to_human":
         rules.append(_rule("LLM_RECOMMENDS_HUMAN_REVIEW", "route_to_human", "The evidence-based analysis recommends specialist review."))
 
@@ -69,19 +71,70 @@ def _eligible_to_settle(claim: dict[str, Any], policy: dict[str, Any], processin
         and not processing.get("manual_review_required")
         and not processing.get("consistency", {}).get("has_conflicts")
         and not processing.get("duplicate_documents")
-        and str(policy.get("status") or "").upper() == "ACTIVE"
+        and _policy_is_valid(policy)
         and amount is not None and amount <= AUTO_SETTLEMENT_LIMIT_EGP
+        and _decimal(policy.get("remaining_limit")) is not None and _decimal(policy.get("remaining_limit")) >= amount
         and analysis.get("recommendation") == "settle"
-        and bool(analysis.get("retrieved_handbook_references"))
+        and _supported_settlement(analysis, policy)
     )
 
 
-def _supported_exclusion(analysis: dict[str, Any]) -> bool:
-    if analysis.get("recommendation") != "reject" or not analysis.get("retrieved_handbook_references"):
+def _policy_is_valid(policy: dict[str, Any]) -> bool:
+    return bool(policy and str(policy.get("status") or "").upper() == "ACTIVE" and policy.get("validation_passed", True))
+
+
+def _supported_exclusion(analysis: dict[str, Any], policy: dict[str, Any]) -> bool:
+    """Reject only for a cited, applicable coverage/exclusion rule.
+
+    Retrieval is intentionally broad, so merely returning an exclusions or
+    documents chunk is not evidence that it applies to this claim.
+    """
+    if analysis.get("recommendation") != "reject":
         return False
-    evidence = " ".join(str(item.get(key, "")) for item in analysis.get("reasoning") or [] if isinstance(item, dict) for key in ("finding", "evidence"))
-    evidence = f"{analysis.get('summary', '')} {evidence}".casefold()
-    return "exclude" in evidence or "not covered" in evidence or "not cover" in evidence
+    evidence = _cited_evidence(analysis, policy)
+    return any(
+        reference.get("rule_category") in {"EXCLUSION", "COVERAGE"}
+        and any(term in finding.casefold() for term in ("exclude", "not covered", "no cover", "not cover"))
+        for reference, finding in evidence
+    )
+
+
+def _supported_settlement(analysis: dict[str, Any], policy: dict[str, Any]) -> bool:
+    """A settlement needs cited, applicable coverage and settlement authority."""
+    categories = {reference.get("rule_category") for reference, _ in _cited_evidence(analysis, policy)}
+    return {"COVERAGE", "SETTLEMENT"}.issubset(categories)
+
+
+def _cited_evidence(analysis: dict[str, Any], policy: dict[str, Any]) -> list[tuple[dict[str, Any], str]]:
+    references = {
+        str(reference.get("chunk_id")): reference
+        for reference in analysis.get("retrieved_handbook_references") or []
+        if isinstance(reference, dict) and _reference_applies(reference, policy)
+    }
+    evidence: list[tuple[dict[str, Any], str]] = []
+    for finding in analysis.get("reasoning") or []:
+        if not isinstance(finding, dict):
+            continue
+        text = " ".join(str(finding.get(key, "")) for key in ("finding", "evidence"))
+        for citation in finding.get("handbook_references") or []:
+            if not isinstance(citation, dict):
+                continue
+            reference = references.get(str(citation.get("chunk_id")))
+            if reference:
+                evidence.append((reference, text))
+    return evidence
+
+
+def _reference_applies(reference: dict[str, Any], policy: dict[str, Any]) -> bool:
+    products = reference.get("applies_to_products", "ALL")
+    if isinstance(products, str):
+        values = {item.strip().upper() for item in products.split(",") if item.strip()}
+    elif isinstance(products, list):
+        values = {str(item).strip().upper() for item in products if str(item).strip()}
+    else:
+        return False
+    product = str(policy.get("product_line") or "").strip().upper()
+    return bool(values) and ("ALL" in values or product in values)
 
 
 def _duplicate_detected(processing: dict[str, Any], duplicate_detection: dict[str, Any] | None) -> bool:

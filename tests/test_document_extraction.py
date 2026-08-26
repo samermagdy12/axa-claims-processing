@@ -276,6 +276,60 @@ NONE
         registration = extract_structured_data("Vehicle Registration", "Engine Capacity\n1800 CC")
         self.assertEqual(registration["engine_capacity_cc"], 1800)
 
+    def test_rejects_invalid_typed_ocr_values_and_extracts_valid_sex(self):
+        licence = extract_structured_data("Driver's Licence", """15Sex
+01/01/2000
+F
+Date of bith
+01/01/2000
+Class
+9aEnd""", "image_ocr")
+        self.assertEqual(licence["sex"], "F")
+        self.assertEqual(licence["date_of_birth"], "2000-01-01")
+        self.assertIsNone(licence["vehicle_class"])
+
+        registration = extract_structured_data("Vehicle Registration", """Engine Capacity
+not 1800 cc
+Fuel Type
+petro1
+Number of Seats
+five""", "image_ocr")
+        self.assertIsNone(registration["engine_capacity_cc"])
+        self.assertIsNone(registration["fuel_type"])
+        self.assertIsNone(registration["number_of_seats"])
+
+    def test_reconstructs_wrapped_text_until_the_next_recognised_label(self):
+        police = extract_structured_data("Police Report", """INCIDENTSUMMARY
+Vehicle was hit from behind while stopped at a traffic signal. Visible damage includes
+the rear bumper, trunk lid, and right tail lamp.
+OFFICER NOTE
+No injuries were reported at the scene. Parties were advised to submit this report to
+their insurer.
+REPORT NUMBER
+PR-12345""", "image_ocr")
+        self.assertEqual(
+            police["incident_summary"],
+            "Vehicle was hit from behind while stopped at a traffic signal. Visible damage includes the rear bumper, trunk lid, and right tail lamp.",
+        )
+        self.assertEqual(
+            police["officer_notes"],
+            "No injuries were reported at the scene. Parties were advised to submit this report to their insurer.",
+        )
+        self.assertEqual(police["report_number"], "PR-12345")
+        self.assertFalse(police["injuries_reported"])
+
+    def test_shared_text_parser_reconstructs_health_and_travel_descriptions(self):
+        medical = extract_structured_data("Medical Report", """Diagnosis
+Sprained ankle after a fall while travelling.
+Treatment
+Ankle immobilisation and pain relief were prescribed over
+the following seven days.
+Report Date
+18 June 2026""")
+        self.assertEqual(medical["diagnosis"], "Sprained ankle after a fall while travelling.")
+        self.assertEqual(medical["treatment"], "Ankle immobilisation and pain relief were prescribed over the following seven days.")
+        self.assertEqual(medical["report_date"], "2026-06-18")
+
     def test_every_requirement_document_type_has_an_intentional_parser_or_visual_result(self):
         from app.claim_requirements import REQUIRED_DOCUMENTS
 

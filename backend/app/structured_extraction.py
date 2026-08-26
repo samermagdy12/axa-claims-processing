@@ -18,6 +18,12 @@ _COMMON_LABELS = {
     "name", "full name", "licence number", "license number", "date of birth", "issue date", "expiry date",
     "address", "vehicle class", "class", "restrictions", "member id", "policy number", "invoice number",
     "invoice date", "total amount", "subtotal", "tax", "vat", "patient", "diagnosis", "treatment",
+    "officer note", "officer notes", "injuries", "injuries reported", "vehicle information", "reporting authority",
+    "engine number", "engine capacity", "fuel type", "number of seats", "colour", "color", "status",
+    "findings", "requested service", "item description", "reason",
+    "subject", "statement date", "inspection date", "flight number", "passenger name", "baggage reference",
+    "baggage tag", "station", "supplier", "quotation number", "purchase date", "prescription date", "report date",
+    "request date", "issued date", "quotation date", "registration issue date", "registration expiry",
 }
 
 
@@ -74,16 +80,41 @@ def _valid_value(value: str, labels: set[str]) -> bool:
     return not any(token in candidate.lower() for token in forbidden)
 
 
-def _line_value(lines: list[str], *labels: str) -> str | None:
-    """Support both ``Label: value`` and a safe ``Label``/``value`` layout."""
+def _is_recognised_label(line: str, labels: set[str]) -> bool:
+    """Identify a new field heading without treating ordinary prose as one."""
+    key = _key(line.partition(":")[0])
+    return key in labels or key in _COMMON_LABELS
+
+
+def _multiline_value(lines: list[str], start: int, labels: set[str], *, has_initial_value: bool = False) -> str | None:
+    values: list[str] = []
+    for line in lines[start:]:
+        if (values or has_initial_value) and _is_recognised_label(line, labels):
+            break
+        if not _valid_value(line, labels):
+            break
+        values.append(line.strip())
+    return " ".join(values) or None
+
+
+def _line_value(lines: list[str], *labels: str, multiline: bool = False) -> str | None:
+    """Support inline, following-line, and bounded wrapped text field values."""
     label_keys = {_key(label) for label in labels}
+    known_labels = _COMMON_LABELS | label_keys
     for index, line in enumerate(lines):
         key, separator, value = line.partition(":")
         if separator and any(_label_matches(key, label) for label in labels) and _valid_value(value, label_keys):
-            return value.strip()
+            if not multiline:
+                return value.strip()
+            continuation = _multiline_value(lines, index + 1, known_labels, has_initial_value=True)
+            return " ".join(part for part in (value.strip(), continuation) if part)
         if any(_label_matches(line, label) for label in labels) and index + 1 < len(lines) and _valid_value(lines[index + 1], label_keys):
-            return lines[index + 1]
+            return _multiline_value(lines, index + 1, known_labels) if multiline else lines[index + 1]
     return None
+
+
+def _text_value(lines: list[str], *labels: str) -> str | None:
+    return _line_value(lines, *labels, multiline=True)
 
 
 def _date(value: str | None, *, month_first: bool = False) -> str | None:
@@ -124,7 +155,7 @@ def _integer(value: str | None) -> int | None:
 
 
 def _number_from_text(value: str | None) -> int | None:
-    match = re.search(r"\b(\d{1,6})\b", value or "")
+    match = re.fullmatch(r"\s*(\d{1,6})(?:\s*(?:cc|seats?))?\s*", value or "", re.I)
     return int(match.group(1)) if match else None
 
 
@@ -153,6 +184,20 @@ def _licence_class(value: str | None) -> str | None:
     candidate = value.strip().upper()
     # Known licence categories; reject OCR fragments such as "9aEnd".
     return candidate if re.fullmatch(r"(?:A|A1|B|B1|C|C1|D|D1|E|M)", candidate) else None
+
+
+def _sex(value: str | None) -> str | None:
+    if not value:
+        return None
+    candidate = value.strip().lower().rstrip(".")
+    return {"m": "M", "male": "Male", "f": "F", "female": "Female"}.get(candidate)
+
+
+def _enum(value: str | None, allowed: set[str]) -> str | None:
+    if not value:
+        return None
+    candidate = value.strip().upper()
+    return candidate if candidate in allowed else None
 
 
 def _time(value: str | None) -> str | None:
@@ -188,7 +233,7 @@ def _repair_estimate(lines: list[str]) -> dict:
                            "year": int(vehicle.group(2)) if vehicle else None}
     data["registration_number"] = _line_value(lines, "registration", "registration number", "plate number")
     data["claim_reference"] = _line_value(lines, "claim reference", "claim number")
-    data["damage_description"] = _section(lines, "damage assessment", "estimated repair items") or _line_value(lines, "damage", "damage description", "description")
+    data["damage_description"] = _section(lines, "damage assessment", "estimated repair items") or _text_value(lines, "damage", "damage description", "description")
     data["repair_items"] = _repair_items(lines)
     total = _line_value(lines, "total estimated repair cost", "total estimated", "total estimate") or _inline_total(lines, r"(?:grand )?total(?: estimated(?: repair cost)?)?")
     data["total_estimated_repair_cost"] = _amount(total)
@@ -241,9 +286,9 @@ def _drivers_licence(lines: list[str]) -> dict:
     licence_number = _line_value(lines, "licence number", "license number", "dl number")
     if licence_number is None:
         licence_number = next((line for line in lines if re.fullmatch(r"[A-Z]\d{7,14}", line.strip(), re.I)), None)
-    sex = _line_value(lines, "sex", "gender")
+    sex = _sex(_line_value(lines, "sex", "gender"))
     if sex is None:
-        sex = next((line.upper() for line in lines if re.fullmatch(r"[FM]", line.strip(), re.I)), None)
+        sex = next((_sex(line) for line in lines if _sex(line)), None)
     address = _line_value(lines, "address")
     if address is None:
         address_lines = [line for line in lines if re.search(r"\d{2,}.*(?:street|st\b|road|rd\b|avenue|ave\b)|\b[A-Z][A-Z]+,\s*[A-Z]{2}\s*\d{5}\b", line, re.I)]
@@ -265,11 +310,13 @@ def _vehicle_registration(lines: list[str]) -> dict:
             "vehicle_make": _line_value(lines, "vehicle make", "make"), "vehicle_model": _line_value(lines, "vehicle model", "model"),
             "model_year": _vehicle_year(_line_value(lines, "model year", "year")), "vehicle_type": _line_value(lines, "vehicle type", "type"),
             "colour": _line_value(lines, "colour", "color"), "engine_number": _line_value(lines, "engine number"),
-            "engine_capacity_cc": _number_from_text(_line_value(lines, "engine capacity cc", "engine capacity")), "fuel_type": _line_value(lines, "fuel type"),
+            "engine_capacity_cc": _number_from_text(_line_value(lines, "engine capacity cc", "engine capacity")),
+            "fuel_type": _enum(_line_value(lines, "fuel type"), {"PETROL", "GASOLINE", "DIESEL", "ELECTRIC", "HYBRID", "LPG", "CNG"}),
             "number_of_seats": _number_from_text(_line_value(lines, "number of seats", "seats")),
             "registration_issue_date": _labelled_date(lines, "registration issue date", "issue date"),
             "registration_expiry_date": _labelled_date(lines, "registration expiry date", "registration expiry", "registration expiration", "expiry date"),
-            "issuing_authority": _line_value(lines, "issuing authority", "authority"), "status": _line_value(lines, "status")}
+            "issuing_authority": _line_value(lines, "issuing authority", "authority"),
+            "status": _enum(_line_value(lines, "status"), {"ACTIVE", "VALID", "EXPIRED", "SUSPENDED", "CANCELLED", "INACTIVE"})}
 
 
 def _invoice(lines: list[str]) -> dict:
@@ -281,7 +328,7 @@ def _invoice(lines: list[str]) -> dict:
 
 def _medical_report(lines: list[str]) -> dict:
     return {"patient_name": _line_value(lines, "patient", "patient name", "member"), "provider_name": _line_value(lines, "provider", "hospital", "clinic", "physician", "doctor"),
-            "report_date": _labelled_date(lines, "report date", "date"), "diagnosis": _line_value(lines, "diagnosis"), "treatment": _line_value(lines, "treatment"),
+            "report_date": _labelled_date(lines, "report date", "date"), "diagnosis": _text_value(lines, "diagnosis"), "treatment": _text_value(lines, "treatment"),
             "admission_date": _labelled_date(lines, "admission date"), "discharge_date": _labelled_date(lines, "discharge date")}
 
 
@@ -291,8 +338,8 @@ def _police_report(lines: list[str]) -> dict:
     if vehicle:
         match = re.search(r"\bregistration\s+([A-Z0-9-]{4,16})\b", vehicle, re.I)
         registration = _registration_number(match.group(1)) if match else None
-    narrative = _line_value(lines, "incident summary", "summary")
-    officer_notes = _line_value(lines, "officer notes", "officer note", "notes")
+    narrative = _text_value(lines, "incident summary", "summary")
+    officer_notes = _text_value(lines, "officer notes", "officer note", "notes")
     injury_text = " ".join(value for value in (narrative, officer_notes, _line_value(lines, "injuries reported", "injuries")) if value)
     injuries_reported = False if re.search(r"\bno injuries\b", injury_text, re.I) else (True if re.search(r"\binjur(?:y|ies)\b", injury_text, re.I) else None)
     return {"report_number": _line_value(lines, "report number", "report no", "police report number"), "incident_date": _labelled_date(lines, "incident date", "accident date"),
@@ -307,8 +354,20 @@ def _member_id(lines: list[str]) -> dict:
             "policy_number": _line_value(lines, "policy number", "policy no"), "expiry_date": _labelled_date(lines, "expiry", "expiry date", "expiration date")}
 
 
+_MULTILINE_TEXT_FIELDS = {
+    "diagnosis", "treatment", "findings", "requested_service", "item_description", "reason", "subject",
+}
+
+
 def _simple_document(lines: list[str], schema: dict[str, tuple[str, ...]]) -> dict:
-    return {field: (_labelled_date(lines, *labels) if field.endswith("_date") else _line_value(lines, *labels)) for field, labels in schema.items()}
+    return {
+        field: (
+            _labelled_date(lines, *labels)
+            if field.endswith("_date")
+            else _text_value(lines, *labels) if field in _MULTILINE_TEXT_FIELDS else _line_value(lines, *labels)
+        )
+        for field, labels in schema.items()
+    }
 
 
 def _split_list(value: str | None) -> list[str] | None:
@@ -320,11 +379,14 @@ def _fire_brigade_report(lines: list[str]) -> dict:
 
 
 def _itemised_list(lines: list[str]) -> dict:
-    return _simple_document(lines, {"list_reference": ("list reference", "reference"), "owner_name": ("owner", "customer"), "total_value": ("total value", "total")})
+    data = _simple_document(lines, {"list_reference": ("list reference", "reference"), "owner_name": ("owner", "customer")})
+    data["total_value"] = _amount(_line_value(lines, "total value", "total"))
+    return data
 
 
 def _quotation(lines: list[str]) -> dict:
-    return _simple_document(lines, {"supplier_name": ("supplier", "contractor", "provider"), "quotation_number": ("quotation number", "quote number"), "quotation_date": ("quotation date", "date"), "total_amount": ("total amount", "total")}) | {"currency": _currency(lines)}
+    data = _simple_document(lines, {"supplier_name": ("supplier", "contractor", "provider"), "quotation_number": ("quotation number", "quote number"), "quotation_date": ("quotation date", "date")})
+    return data | {"total_amount": _amount(_line_value(lines, "total amount", "total")), "currency": _currency(lines)}
 
 
 def _prescription(lines: list[str]) -> dict:

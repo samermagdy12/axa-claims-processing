@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import {
   Button, Card, ClaimStatusBadge, ProductBadge, PageHeader, Amount, Alert, DataRow, DocStatusChip, Spinner,
 } from '../../components/UI';
-import { decideClaim, extractClaimDocument, getClaim, removeClaimDocument, uploadClaimDocument } from '../../api';
+import { extractClaimDocument, getClaim, removeClaimDocument, uploadClaimDocument } from '../../api';
 import type { DocumentValidation } from '../../api';
 import type { Claim, Screen } from '../../types';
 
@@ -20,7 +20,6 @@ export default function ClaimDetails({ claimId, token, initialValidationResults,
   const [uploadingDocument, setUploadingDocument] = useState<string | null>(null);
   const [uploadError, setUploadError] = useState('');
   const [pendingDocumentType, setPendingDocumentType] = useState('');
-  const [deciding, setDeciding] = useState(false);
   const [documentValidation, setDocumentValidation] = useState<Record<string, DocumentValidation>>(() => parseValidationResults(initialValidationResults));
   const fileRef = useRef<HTMLInputElement | null>(null);
 
@@ -47,19 +46,6 @@ export default function ClaimDetails({ claimId, token, initialValidationResults,
     setUploadError('');
     setPendingDocumentType(documentType);
     fileRef.current?.click();
-  };
-
-  const requestDecision = async () => {
-    setDeciding(true);
-    setError('');
-    try {
-      await decideClaim(token, claimId);
-      setClaim(await getClaim(claimId, token));
-    } catch (requestError) {
-      setError(requestError instanceof Error ? requestError.message : 'Unable to complete the claim decision.');
-    } finally {
-      setDeciding(false);
-    }
   };
 
   const uploadSelectedDocument = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -203,7 +189,7 @@ export default function ClaimDetails({ claimId, token, initialValidationResults,
           <Card className="p-4">
             <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Actions</p>
             <div className="space-y-2">
-              <Button className="w-full" loading={deciding} onClick={requestDecision}>Get claim decision</Button>
+              <p className="text-xs text-gray-500 pb-1">Your claim progresses automatically once required documents have been validated.</p>
               <Button variant="outline" className="w-full" onClick={() => navigate('my-claims')}>
                 ← All Claims
               </Button>

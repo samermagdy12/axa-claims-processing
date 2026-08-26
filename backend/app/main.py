@@ -1,4 +1,5 @@
 import json
+from datetime import date
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, File, Form, HTTPException, UploadFile, status
@@ -365,6 +366,15 @@ def extract_claim_document(
     except Exception:
         db.rollback()
         raise
+    # Document extraction is the customer-facing trigger.  Once every required
+    # document is usable, the rest of the lifecycle proceeds without a button.
+    try:
+        _run_automatic_pipeline(claim_id, current_user, db)
+    except Exception:
+        # Extraction has already been committed. A transient RAG/provider or
+        # follow-up pipeline failure must not make a valid customer upload look
+        # failed; the persisted claim remains available for automatic retry.
+        db.rollback()
     return _document_extraction_response(dict(saved), reused=False)
 
 
@@ -425,7 +435,10 @@ def get_claim_processing_summary(claim_id: str, current_user: dict = Depends(get
             documents.append({"document_id": str(uploaded["document_id"]), "document_type": uploaded["document_type"], "normalized_data": normalize_document_data(uploaded["document_type"], None), "validation": {"expected_document_type": uploaded["document_type"], "detected_document_type": None, "validation_passed": None, "confidence": None, "reason": "Document has not been extracted yet."}})
             continue
         documents.append({"document_id": data.get("document_id"), "document_type": data.get("document_type"), "normalized_data": data.get("normalized_data") or normalize_document_data(data.get("document_type", "Unknown"), data.get("structured_data")), "validation": data.get("document_validation") or validate_document(data.get("document_type", "Unknown"), data.get("extracted_text", ""), data.get("structured_data"))})
-    return build_claim_processing_summary(required_documents, documents)
+    summary = build_claim_processing_summary(required_documents, documents)
+    pipeline_row = db.execute(text("SELECT details FROM audit_logs WHERE claim_id = :claim_id AND action = 'AUTOMATED_PIPELINE' ORDER BY timestamp DESC LIMIT 1"), {"claim_id": claim_id}).mappings().first()
+    decision_row = db.execute(text("SELECT outcome, reason FROM decisions WHERE claim_id = :claim_id ORDER BY created_at DESC LIMIT 1"), {"claim_id": claim_id}).mappings().first()
+    return {**summary, "pipeline": _json_value(pipeline_row["details"]) if pipeline_row else {}, "final_decision": dict(decision_row) if decision_row else None}
 
 
 @app.post("/claims/{claim_id}/analyze")
@@ -478,16 +491,36 @@ def analyze_claim(claim_id: str, current_user: dict = Depends(get_current_user),
         "status": claim_data["policy_status"], "start_date": claim_data["start_date"], "end_date": claim_data["end_date"],
         "annual_limit": claim_data["annual_limit"], "remaining_limit": claim_data["remaining_limit"], "deductible": claim_data["deductible"], "riders": claim_data["riders"],
     }
+    policy_valid = str(policy["status"]).upper() == "ACTIVE" and _incident_within_policy(claim_data.get("incident_date"), policy.get("start_date"), policy.get("end_date"))
+    policy_validation = {"passed": policy_valid, "reason": "Policy is active and covers the incident date." if policy_valid else "Policy is inactive or does not cover the incident date."}
+    # Step 4 is a hard stop: do not call RAG/LLM or imply later stages passed.
+    if processing["missing_documents"] or processing["invalid_documents"] or processing["manual_review_required"]:
+        return {"claim_id": str(claim_id), "processing": processing, "policy_validation": policy_validation,
+                "recommendation": "request_documents", "confidence": 1.0, "summary": "Required documents need attention before policy and coverage checks can continue.",
+                "reasoning": [], "missing_information": processing["missing_documents"], "validation_issues": [item.get("document_type") for item in processing["invalid_documents"]],
+                "consistency_issues": [], "recommended_next_actions": ["Provide or replace the required documents."], "retrieved_handbook_references": [], "retrieval": {"results": []}, "provider": "deterministic"}
     try:
         analysis = analyze_claim_context(build_claim_context(claim_data, policy, documents, processing))
     except (HandbookKnowledgeError, ClaimAnalysisError) as exc:
-        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
-    return {"claim_id": str(claim_id), "processing": processing, **analysis}
+        # Never leave a complete customer claim in limbo because an external
+        # reasoning provider is unavailable. The deterministic engine will
+        # conservatively route it to an assessor instead of fabricating cover.
+        analysis = {"recommendation": "route_to_human", "confidence": 0.0,
+                    "summary": "Automated coverage analysis is unavailable; specialist review is required.",
+                    "reasoning": [], "missing_information": [], "validation_issues": [], "consistency_issues": [],
+                    "recommended_next_actions": ["Assign an assessor."], "retrieved_handbook_references": [],
+                    "retrieval": {"results": []}, "provider": "deterministic_fallback"}
+    return {"claim_id": str(claim_id), "processing": processing, "policy_validation": policy_validation, **analysis}
 
 
 @app.post("/claims/{claim_id}/decide")
 def decide_claim_endpoint(claim_id: str, current_user: dict = Depends(get_current_user), db: Session = Depends(get_db)):
-    """Run RAG analysis once, then enforce the deterministic final decision."""
+    """Internal-compatible entry point; customer flow invokes this automatically."""
+    return _run_automatic_pipeline(claim_id, current_user, db)
+
+
+def _run_automatic_pipeline(claim_id: str, current_user: dict, db: Session) -> dict:
+    """Persist the deterministic lifecycle after documents are extracted."""
     analysis_result = analyze_claim(claim_id, current_user, db)
     claim = db.execute(
         text("""SELECT c.claim_id, c.claimed_amount, p.status AS policy_status
@@ -503,6 +536,14 @@ def decide_claim_endpoint(claim_id: str, current_user: dict = Depends(get_curren
     claim_status = {"settle": "APPROVED", "request_documents": "WAITING_FOR_DOCUMENTS", "reject": "REJECTED", "route_to_human": "UNDER_HUMAN_REVIEW"}[result["final_decision"]]
     handbook_clause = next((reference.get("rule_identifier") for reference in result["handbook_references"] if reference.get("rule_identifier")), None)
     try:
+        stage_state = {
+            "required_documents": "blocked" if result["final_decision"] == "request_documents" else "completed",
+            "policy_validation": "completed" if result["final_decision"] != "request_documents" else "waiting",
+            "coverage_check": "completed" if result["final_decision"] != "request_documents" else "waiting",
+            "risk_check": "completed" if result["final_decision"] != "request_documents" else "waiting",
+            "decision": "completed" if result["final_decision"] != "request_documents" else "waiting",
+            "policy_validation_detail": analysis_result.get("policy_validation"),
+        }
         db.execute(text("UPDATE claims SET status = :status, updated_at = CURRENT_TIMESTAMP WHERE claim_id = :claim_id"), {"status": claim_status, "claim_id": claim_id})
         db.execute(text("""INSERT INTO decisions (claim_id, outcome, reason, handbook_clause, risk_detected, risk_reason, customer_message)
                          VALUES (:claim_id, :outcome, :reason, :handbook_clause, :risk_detected, :risk_reason, :customer_message)"""), {
@@ -514,11 +555,23 @@ def decide_claim_endpoint(claim_id: str, current_user: dict = Depends(get_curren
                          VALUES (:claim_id, :user_id, 'FINAL_DECISION', CAST(:details AS jsonb))"""), {
             "claim_id": claim_id, "user_id": current_user["user_id"], "details": json.dumps(result, default=str),
         })
+        db.execute(text("""INSERT INTO audit_logs (claim_id, user_id, action, details)
+                         VALUES (:claim_id, :user_id, 'AUTOMATED_PIPELINE', CAST(:details AS jsonb))"""), {
+            "claim_id": claim_id, "user_id": current_user["user_id"], "details": json.dumps(stage_state, default=str),
+        })
         db.commit()
     except Exception:
         db.rollback()
         raise
     return {"claim_id": str(claim_id), **result}
+
+
+def _incident_within_policy(incident_date, start_date, end_date) -> bool:
+    try:
+        incident = date.fromisoformat(str(incident_date)[:10])
+        return date.fromisoformat(str(start_date)[:10]) <= incident <= date.fromisoformat(str(end_date)[:10])
+    except (TypeError, ValueError):
+        return False
 
 
 def _claim_response(claim: dict) -> dict:

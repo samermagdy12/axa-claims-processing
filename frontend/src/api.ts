@@ -132,6 +132,8 @@ export function extractClaimDocument(token: string, claimId: string, documentId:
 export function decideClaim(token: string, claimId: string): Promise<FinalDecision> {
   return request<FinalDecision>(`/claims/${encodeURIComponent(claimId)}/decide`, { method: 'POST', headers: { Authorization: `Bearer ${token}` } });
 }
+export type ProcessingSummary = { outcome: string; complete: boolean; missing_documents: string[]; invalid_documents: unknown[]; manual_review_required: boolean; pipeline?: Record<string, string>; final_decision?: { outcome: string; reason: string } | null };
+export function getProcessingSummary(token: string, claimId: string) { return request<ProcessingSummary>(`/claims/${encodeURIComponent(claimId)}/processing-summary`, { headers: { Authorization: `Bearer ${token}` } }); }
 type AssessorQueueItem = { claim_id: string; customer_name: string; policy_number: string; product_line: AssessorClaim['productLine']; claim_type: string; claimed_amount: number; incident_date: string; submission_date: string; status: AssessorClaim['status']; final_decision?: string | null; reason?: string | null; risk_level: AssessorClaim['riskStatus'] };
 export function getAssessorQueue(token: string): Promise<AssessorClaim[]> {
   return request<AssessorQueueItem[]>('/assessor/claims', { headers: { Authorization: `Bearer ${token}` } }).then(rows => rows.map(row => ({

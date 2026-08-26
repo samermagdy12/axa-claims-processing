@@ -99,6 +99,7 @@ export default function App() {
       extractionsCompleted={Number(completedExtractions || 0)}
       processingFailures={Number(processingFailures || 0)}
       validationResults={processingValidationResults || '[]'}
+      token={token || ''}
       navigate={navigate}
     />;
   }

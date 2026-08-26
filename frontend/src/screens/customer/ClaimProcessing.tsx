@@ -1,5 +1,7 @@
+import { useEffect, useState } from 'react';
 import { Alert, Button } from '../../components/UI';
-import type { DocumentValidation } from '../../api';
+import { getProcessingSummary } from '../../api';
+import type { DocumentValidation, ProcessingSummary } from '../../api';
 import type { Screen } from '../../types';
 
 interface ClaimProcessingProps {
@@ -8,21 +10,26 @@ interface ClaimProcessingProps {
   extractionsCompleted: number;
   processingFailures: number;
   validationResults: string;
+  token: string;
   navigate: (screen: Screen, params?: Record<string, string>) => void;
 }
 
-export default function ClaimProcessing({ claimId, documentsProcessed, extractionsCompleted, processingFailures, validationResults, navigate }: ClaimProcessingProps) {
+export default function ClaimProcessing({ claimId, documentsProcessed, extractionsCompleted, processingFailures, validationResults, token, navigate }: ClaimProcessingProps) {
   const results = parseValidationResults(validationResults);
+  const [summary, setSummary] = useState<ProcessingSummary | null>(null);
+  useEffect(() => { getProcessingSummary(token, claimId).then(setSummary).catch(() => setSummary(null)); }, [token, claimId]);
   const documentsChecked = processingFailures === 0;
+  const blocked = Boolean(summary?.missing_documents.length || summary?.invalid_documents.length || summary?.manual_review_required);
+  const pipeline = summary?.pipeline || {};
   const stages = [
     { label: 'Claim Received', detail: 'Your claim was submitted successfully.', complete: true },
     { label: 'Document Processing', detail: `${documentsProcessed} uploaded document${documentsProcessed === 1 ? '' : 's'} processed.`, complete: documentsProcessed > 0 },
     { label: 'Information Extracted', detail: `${extractionsCompleted} real extraction record${extractionsCompleted === 1 ? '' : 's'} saved.`, complete: extractionsCompleted > 0 },
-    { label: 'Required Documents Checked', detail: documentsChecked ? 'The uploaded-document checklist was updated.' : 'Some selected documents could not be processed; review the claim checklist.', complete: documentsChecked },
-    { label: 'Policy Validated', detail: 'Not implemented in this phase.', complete: false },
-    { label: 'Coverage Checked', detail: 'Not implemented in this phase.', complete: false },
-    { label: 'Risk Checks Complete', detail: 'Not implemented in this phase.', complete: false },
-    { label: 'Decision Made', detail: 'Not implemented in this phase.', complete: false },
+    { label: 'Required Documents Checked', detail: blocked ? `Processing is waiting for: ${[...(summary?.missing_documents || []), ...(summary?.invalid_documents || []).map(() => 'a corrected document')].join(', ')}.` : documentsChecked ? 'All required documents are present and valid.' : 'Some selected documents could not be processed; review the claim checklist.', complete: documentsChecked && !blocked },
+    { label: 'Policy Validated', detail: blocked ? 'Waiting for required documents.' : pipeline.policy_validation === 'completed' ? 'Policy eligibility was validated.' : 'Processing policy eligibility.', complete: pipeline.policy_validation === 'completed' },
+    { label: 'Coverage Checked', detail: blocked ? 'Waiting for required documents.' : pipeline.coverage_check === 'completed' ? 'Coverage was checked against applicable handbook evidence.' : 'Checking coverage.', complete: pipeline.coverage_check === 'completed' },
+    { label: 'Risk Checks Complete', detail: blocked ? 'Waiting for required documents.' : pipeline.risk_check === 'completed' ? 'Risk and consistency signals were evaluated.' : 'Checking risk signals.', complete: pipeline.risk_check === 'completed' },
+    { label: 'Decision Made', detail: blocked ? 'A final decision will be made after document requirements are met.' : summary?.final_decision ? `Final system decision: ${summary.final_decision.outcome.replaceAll('_', ' ')}.` : 'Completing automatic decision.', complete: pipeline.decision === 'completed' },
   ];
 
   return <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4"><div className="w-full max-w-lg">
@@ -30,7 +37,7 @@ export default function ClaimProcessing({ claimId, documentsProcessed, extractio
     {processingFailures > 0 && <Alert variant="warning" title="Some document processing needs attention" className="mb-5">{processingFailures} selected document{processingFailures === 1 ? '' : 's'} could not be uploaded or extracted. Your claim was saved; open it to review the required-document checklist.</Alert>}
     {results.length > 0 && <div className="bg-white border border-gray-200 rounded-2xl p-5 mb-5 space-y-3"><h2 className="text-sm font-semibold text-gray-900">Document validation</h2>{results.map(({ documentType, validation }) => <ValidationResult key={documentType} documentType={documentType} validation={validation} onReplace={() => navigate('claim-details', { selectedClaimId: claimId, processingValidationResults: validationResults })} />)}</div>}
     <div className="bg-white border border-gray-200 rounded-2xl p-6 mb-5 space-y-5">{stages.map((stage, index) => <div key={stage.label} className="flex gap-4"><div className={`w-7 h-7 rounded-full shrink-0 flex items-center justify-center text-xs font-bold ${stage.complete ? 'bg-emerald-500 text-white' : 'bg-gray-200 text-gray-500'}`}>{stage.complete ? '✓' : index + 1}</div><div><p className={`text-sm font-semibold ${stage.complete ? 'text-emerald-700' : 'text-gray-500'}`}>{stage.label}</p><p className="text-xs text-gray-500 mt-0.5">{stage.detail}</p></div></div>)}</div>
-    <div className="bg-axa-blue rounded-2xl p-6 text-center"><p className="text-white font-semibold text-lg mb-1">Your claim is ready for the next available step</p><p className="text-white/70 text-sm mb-5">Only claim submission, document processing, extraction, and checklist updates are completed here.</p><div className="flex gap-3 justify-center"><Button variant="outline" className="bg-white/10 border-white/30 text-white hover:bg-white/20" onClick={() => navigate('my-claims')}>View All Claims</Button><Button className="bg-white text-axa-blue hover:bg-axa-blue-100" onClick={() => navigate('claim-details', { selectedClaimId: claimId })}>View Claim</Button></div></div>
+    <div className="bg-axa-blue rounded-2xl p-6 text-center"><p className="text-white font-semibold text-lg mb-1">{blocked ? 'Action required to continue processing' : 'Your claim is being processed automatically'}</p><p className="text-white/70 text-sm mb-5">{blocked ? 'Upload or replace the indicated documents. Processing resumes automatically after validation.' : 'Policy, coverage, risk, and final decision checks run automatically after document validation.'}</p><div className="flex gap-3 justify-center"><Button variant="outline" className="bg-white/10 border-white/30 text-white hover:bg-white/20" onClick={() => navigate('my-claims')}>View All Claims</Button><Button className="bg-white text-axa-blue hover:bg-axa-blue-100" onClick={() => navigate('claim-details', { selectedClaimId: claimId })}>View Claim</Button></div></div>
   </div></div>;
 }
 

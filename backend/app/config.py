@@ -8,6 +8,11 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
     FRONTEND_ORIGINS: str = "http://localhost:8443,http://127.0.0.1:8443"
     UPLOAD_DIR: str = "uploads"
+    OPENROUTER_API_KEY: str | None = None
+    OPENROUTER_VISION_MODEL: str | None = None
+    GROQ_API_KEY: str | None = None
+    GROQ_VISION_MODEL: str | None = None
+    OCR_API_TIMEOUT_SECONDS: float = 45.0
 
     model_config = SettingsConfigDict(
         env_file=".env",

@@ -291,7 +291,7 @@ def extract_claim_document(
         # and document-specific parsed fields explicit for future validation.
         "extracted_text": extracted.text,
         "raw_extraction": {"text": extracted.text, **({"document_structure": extracted.structure} if extracted.structure else {})},
-        "structured_data": extract_structured_data(document["document_type"], extracted.text, extracted.strategy),
+        "structured_data": extracted.structured_data or extract_structured_data(document["document_type"], extracted.text, extracted.strategy),
         "text_length": len(extracted.text),
     }
     try:

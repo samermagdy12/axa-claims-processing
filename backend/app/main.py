@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.auth import ASSESSOR_ROLE, CUSTOMER_ROLE, OPERATIONS_ROLE, create_access_token, get_current_user, hash_password, require_roles, verify_password
 from app.claim_requirements import get_required_documents
+from app.claim_processing import build_claim_processing_summary, normalize_document_data, validate_document
 from app.config import settings
 from app.database import get_db
 from app.document_extraction import DocumentExtractionError, extract_document_content
@@ -282,6 +283,7 @@ def extract_claim_document(
     except DocumentExtractionError as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
 
+    structured_data = extracted.structured_data or extract_structured_data(document["document_type"], extracted.text, extracted.strategy)
     extracted_data = {
         "document_id": str(document["document_id"]),
         "document_type": document["document_type"],
@@ -291,7 +293,9 @@ def extract_claim_document(
         # and document-specific parsed fields explicit for future validation.
         "extracted_text": extracted.text,
         "raw_extraction": {"text": extracted.text, **({"document_structure": extracted.structure} if extracted.structure else {})},
-        "structured_data": extracted.structured_data or extract_structured_data(document["document_type"], extracted.text, extracted.strategy),
+        "structured_data": structured_data,
+        "normalized_data": normalize_document_data(document["document_type"], structured_data),
+        "document_validation": validate_document(document["document_type"], extracted.text, structured_data),
         "text_length": len(extracted.text),
     }
     try:
@@ -331,6 +335,46 @@ def _document_extraction_response(extraction: dict, reused: bool) -> dict:
         "extracted_at": extraction["extracted_at"],
         "reused": reused,
     }
+
+
+@app.get("/claims/{claim_id}/processing-summary")
+def get_claim_processing_summary(claim_id: str, current_user: dict = Depends(get_current_user), db: Session = Depends(get_db)):
+    claim = db.execute(
+        text("SELECT c.claim_id, p.user_id FROM claims c JOIN policies p ON p.policy_id = c.policy_id WHERE c.claim_id = :claim_id"),
+        {"claim_id": claim_id},
+    ).mappings().first()
+    if claim is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Claim not found")
+    if current_user["role_name"] == CUSTOMER_ROLE and claim["user_id"] != current_user["user_id"]:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You do not have access to this claim")
+    if current_user["role_name"] not in {CUSTOMER_ROLE, ASSESSOR_ROLE, OPERATIONS_ROLE}:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You do not have access to claim processing details")
+    required_documents = [dict(row) for row in db.execute(
+        text("SELECT document_type, is_required, status FROM claim_required_documents WHERE claim_id = :claim_id ORDER BY created_at, document_type"),
+        {"claim_id": claim_id},
+    ).mappings().all()]
+    uploaded_documents = [dict(row) for row in db.execute(
+        text("SELECT document_id, document_type FROM claim_documents WHERE claim_id = :claim_id ORDER BY uploaded_at"),
+        {"claim_id": claim_id},
+    ).mappings().all()]
+    extracted_rows = db.execute(
+        text("SELECT extracted_data FROM claim_extractions WHERE claim_id = :claim_id ORDER BY extracted_at"),
+        {"claim_id": claim_id},
+    ).mappings().all()
+    extraction_by_document_id = {}
+    for row in extracted_rows:
+        data = row["extracted_data"]
+        data = json.loads(data) if isinstance(data, str) else data
+        if isinstance(data, dict):
+            extraction_by_document_id[str(data.get("document_id"))] = data
+    documents = []
+    for uploaded in uploaded_documents:
+        data = extraction_by_document_id.get(str(uploaded["document_id"]))
+        if data is None:
+            documents.append({"document_id": str(uploaded["document_id"]), "document_type": uploaded["document_type"], "normalized_data": normalize_document_data(uploaded["document_type"], None), "validation": {"expected_document_type": uploaded["document_type"], "detected_document_type": None, "validation_passed": None, "confidence": None, "reason": "Document has not been extracted yet."}})
+            continue
+        documents.append({"document_id": data.get("document_id"), "document_type": data.get("document_type"), "normalized_data": data.get("normalized_data") or normalize_document_data(data.get("document_type", "Unknown"), data.get("structured_data")), "validation": data.get("document_validation") or validate_document(data.get("document_type", "Unknown"), data.get("extracted_text", ""), data.get("structured_data"))})
+    return build_claim_processing_summary(required_documents, documents)
 
 
 @app.post("/claims", response_model=ClaimCreateResponse, status_code=status.HTTP_201_CREATED)

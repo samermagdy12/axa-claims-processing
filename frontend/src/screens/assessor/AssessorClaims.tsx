@@ -1,15 +1,18 @@
-import { useState } from 'react';
 import { Card, Button, ClaimStatusBadge, ProductBadge, RiskBadge, PageHeader, Amount, TabBar } from '../../components/UI';
-import { ASSESSOR_CLAIMS } from '../../data';
+import { useEffect, useState } from 'react';
+import { getAssessorQueue } from '../../api';
+import type { AssessorClaim } from '../../types';
 import type { Screen } from '../../types';
 
 interface AssessorClaimsProps {
+  token: string;
   navigate: (screen: Screen, params?: Record<string, string>) => void;
 }
 
-export default function AssessorClaims({ navigate }: AssessorClaimsProps) {
+export default function AssessorClaims({ token, navigate }: AssessorClaimsProps) {
   const [tab, setTab] = useState('All');
-  const all = ASSESSOR_CLAIMS;
+  const [all, setAll] = useState<AssessorClaim[]>([]);
+  useEffect(() => { getAssessorQueue(token).then(setAll).catch(() => setAll([])); }, [token]);
 
   const filtered = tab === 'All' ? all :
     tab === 'Escalated' ? all.filter(c => c.aiRecommendation === 'ESCALATE') :

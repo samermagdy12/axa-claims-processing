@@ -118,3 +118,12 @@ class DocumentExtractionResponse(BaseModel):
     extraction_confidence: Decimal | None
     extracted_at: datetime
     reused: bool
+
+
+class AssessorDecisionRequest(BaseModel):
+    action: str = Field(pattern=r"^(settle|reject|route_to_human|override)$")
+    reason: str | None = Field(default=None, max_length=2000)
+    override_decision: str | None = Field(default=None, pattern=r"^(settle|reject|route_to_human)$")
+
+    def requires_reason(self) -> bool:
+        return self.action in {"reject", "override"}

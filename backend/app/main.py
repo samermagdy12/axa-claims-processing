@@ -18,7 +18,7 @@ from app.document_extraction import DocumentExtractionError, extract_document_co
 from app.structured_extraction import extract_structured_data
 from app.document_upload import store_claim_document
 from app.handbook_knowledge import HandbookKnowledgeError
-from app.schemas import AuthResponse, ClaimCreateRequest, ClaimCreateResponse, ClaimDocumentUploadResponse, CustomerClaimResponse, DocumentExtractionResponse, LoginRequest, PolicyResponse, PolicyVerificationRequest, RegisterRequest
+from app.schemas import AssessorDecisionRequest, AuthResponse, ClaimCreateRequest, ClaimCreateResponse, ClaimDocumentUploadResponse, CustomerClaimResponse, DocumentExtractionResponse, LoginRequest, PolicyResponse, PolicyVerificationRequest, RegisterRequest
 
 
 app = FastAPI(
@@ -587,6 +587,134 @@ def create_claim(payload: ClaimCreateRequest, current_user: dict = Depends(get_c
 def assessor_area(current_user: dict = Depends(require_roles(ASSESSOR_ROLE))):
     """Minimal protected entry point for future assessor review workflows."""
     return {"role": current_user["role_name"], "message": "Assessor access granted"}
+
+
+@app.get("/assessor/claims")
+def assessor_review_queue(current_user: dict = Depends(require_roles(ASSESSOR_ROLE)), db: Session = Depends(get_db)):
+    """Claims that have been deterministically routed for human action."""
+    rows = db.execute(text("""
+        SELECT c.claim_id, c.claim_type, c.claimed_amount, c.incident_date, c.submission_date, c.status,
+               u.full_name AS customer_name, p.policy_number, p.product_line,
+               d.outcome AS final_decision, d.reason, d.risk_detected,
+               hr.human_decision
+        FROM claims c JOIN policies p ON p.policy_id = c.policy_id JOIN users u ON u.user_id = p.user_id
+        LEFT JOIN LATERAL (SELECT outcome, reason, risk_detected FROM decisions WHERE claim_id = c.claim_id ORDER BY created_at DESC LIMIT 1) d ON TRUE
+        LEFT JOIN LATERAL (SELECT human_decision FROM human_reviews WHERE claim_id = c.claim_id ORDER BY reviewed_at DESC NULLS LAST LIMIT 1) hr ON TRUE
+        WHERE c.status IN ('UNDER_HUMAN_REVIEW', 'ROUTED', 'ESCALATED') AND hr.human_decision IS NULL
+        ORDER BY c.submission_date ASC
+    """)).mappings().all()
+    return [{**dict(row), "risk_level": "HIGH" if row["risk_detected"] else "MEDIUM" if row["final_decision"] == "route_to_human" else "NONE"} for row in rows]
+
+
+@app.get("/assessor/claims/{claim_id}")
+def assessor_claim_review(claim_id: str, current_user: dict = Depends(require_roles(ASSESSOR_ROLE)), db: Session = Depends(get_db)):
+    claim = db.execute(text("""
+        SELECT c.claim_id, c.policy_id, c.claim_type, c.incident_date, c.submission_date, c.claimed_amount, c.description, c.status,
+               u.full_name AS customer_name, p.policy_number, p.product_line, p.status AS policy_status,
+               p.start_date, p.end_date, p.annual_limit, p.remaining_limit, p.deductible, p.riders,
+               d.outcome AS final_decision, d.reason AS final_reason, d.customer_message, d.handbook_clause, d.risk_detected,
+               hr.ai_recommendation, hr.human_decision, hr.review_reason, hr.reviewed_at
+        FROM claims c JOIN policies p ON p.policy_id = c.policy_id JOIN users u ON u.user_id = p.user_id
+        LEFT JOIN LATERAL (SELECT outcome, reason, customer_message, handbook_clause, risk_detected FROM decisions WHERE claim_id = c.claim_id ORDER BY created_at DESC LIMIT 1) d ON TRUE
+        LEFT JOIN LATERAL (SELECT ai_recommendation, human_decision, review_reason, reviewed_at FROM human_reviews WHERE claim_id = c.claim_id ORDER BY reviewed_at DESC NULLS LAST LIMIT 1) hr ON TRUE
+        WHERE c.claim_id = :claim_id
+    """), {"claim_id": claim_id}).mappings().first()
+    if claim is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Claim not found")
+    documents = [dict(row) for row in db.execute(text("""
+        SELECT cd.document_id, cd.document_type, cd.original_file_name, cd.mime_type, cd.file_size_bytes, cd.uploaded_at,
+               ce.extraction_confidence, ce.extracted_data
+        FROM claim_documents cd LEFT JOIN LATERAL (
+            SELECT extraction_confidence, extracted_data FROM claim_extractions
+            WHERE claim_id = cd.claim_id AND extracted_data ->> 'document_id' = cd.document_id::text
+            ORDER BY extracted_at DESC LIMIT 1
+        ) ce ON TRUE WHERE cd.claim_id = :claim_id ORDER BY cd.uploaded_at
+    """), {"claim_id": claim_id}).mappings().all()]
+    audit = [dict(row) for row in db.execute(text("""
+        SELECT al.timestamp, al.action, al.details, COALESCE(u.full_name, 'System') AS actor
+        FROM audit_logs al LEFT JOIN users u ON u.user_id = al.user_id
+        WHERE al.claim_id = :claim_id ORDER BY al.timestamp ASC
+    """), {"claim_id": claim_id}).mappings().all()]
+    final_audit = next((row for row in reversed(audit) if row["action"] == "FINAL_DECISION"), None)
+    final_details = _json_value(final_audit.get("details")) if final_audit else {}
+    return {"claim": dict(claim), "documents": [_assessor_document(row) for row in documents], "audit_trail": [_audit_entry(row) for row in audit],
+            "llm_recommendation": final_details.get("llm_recommendation") or claim["ai_recommendation"],
+            "triggered_rules": final_details.get("triggered_rules", []), "handbook_references": final_details.get("handbook_references", []),
+            "processing": final_details.get("processing", {})}
+
+
+@app.post("/assessor/claims/{claim_id}/decision")
+def submit_assessor_decision(claim_id: str, payload: AssessorDecisionRequest, current_user: dict = Depends(require_roles(ASSESSOR_ROLE)), db: Session = Depends(get_db)):
+    reason = (payload.reason or "").strip()
+    if payload.requires_reason() and not reason:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="A reason is required for rejection or override")
+    if payload.action == "override" and not payload.override_decision:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="An override decision is required")
+    claim = db.execute(text("""SELECT c.claim_id, c.status, d.outcome AS final_decision,
+        (SELECT details ->> 'llm_recommendation' FROM audit_logs WHERE claim_id = c.claim_id AND action = 'FINAL_DECISION' ORDER BY timestamp DESC LIMIT 1) AS llm_recommendation
+        FROM claims c LEFT JOIN LATERAL (SELECT outcome FROM decisions WHERE claim_id = c.claim_id ORDER BY created_at DESC LIMIT 1) d ON TRUE WHERE c.claim_id = :claim_id"""), {"claim_id": claim_id}).mappings().first()
+    if claim is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Claim not found")
+    if claim["status"] not in {"UNDER_HUMAN_REVIEW", "ROUTED", "ESCALATED"}:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="This claim is not awaiting assessor action")
+    decision = payload.override_decision if payload.action == "override" else payload.action
+    status_by_decision = {"settle": "APPROVED", "reject": "REJECTED", "route_to_human": "ESCALATED"}
+    try:
+        db.execute(text("UPDATE claims SET status = :status, updated_at = CURRENT_TIMESTAMP WHERE claim_id = :claim_id"), {"status": status_by_decision[decision], "claim_id": claim_id})
+        db.execute(text("""INSERT INTO human_reviews (claim_id, assessor_id, ai_recommendation, human_decision, review_reason, reviewed_at)
+                         VALUES (:claim_id, :assessor_id, :ai_recommendation, :human_decision, :reason, CURRENT_TIMESTAMP)"""),
+                   {"claim_id": claim_id, "assessor_id": current_user["user_id"], "ai_recommendation": claim["llm_recommendation"], "human_decision": decision, "reason": reason or None})
+        db.execute(text("""INSERT INTO decisions (claim_id, outcome, reason, customer_message, decided_by)
+                         VALUES (:claim_id, :outcome, :reason, :customer_message, :assessor_id)"""),
+                   {"claim_id": claim_id, "outcome": decision, "reason": reason or "Assessor decision recorded.", "assessor_id": current_user["user_id"], "customer_message": _customer_message_for_human_decision(decision)})
+        db.execute(text("""INSERT INTO audit_logs (claim_id, user_id, action, details)
+                         VALUES (:claim_id, :user_id, :action, CAST(:details AS jsonb))"""),
+                   {"claim_id": claim_id, "user_id": current_user["user_id"], "action": "ASSESSOR_OVERRIDE" if payload.action == "override" else "ASSESSOR_DECISION", "details": json.dumps({"action": payload.action, "decision": decision, "reason": reason, "original_llm_recommendation": claim["llm_recommendation"], "previous_final_decision": claim["final_decision"]})})
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    return {"claim_id": str(claim_id), "human_decision": decision, "decision_source": "human", "reason": reason}
+
+
+@app.get("/operations/overview")
+def operations_overview(current_user: dict = Depends(require_roles(OPERATIONS_ROLE)), db: Session = Depends(get_db)):
+    rows = db.execute(text("""
+        SELECT p.product_line,
+          COUNT(*) AS processed,
+          COUNT(*) FILTER (WHERE c.status = 'APPROVED') AS approved,
+          COUNT(*) FILTER (WHERE c.status IN ('UNDER_HUMAN_REVIEW', 'ROUTED', 'ESCALATED')) AS routed,
+          COUNT(*) FILTER (WHERE c.status = 'REJECTED') AS rejected,
+          COUNT(*) FILTER (WHERE d.risk_detected) AS risk_flagged
+        FROM claims c JOIN policies p ON p.policy_id = c.policy_id
+        LEFT JOIN LATERAL (SELECT risk_detected FROM decisions WHERE claim_id = c.claim_id ORDER BY created_at DESC LIMIT 1) d ON TRUE
+        GROUP BY p.product_line ORDER BY p.product_line
+    """)).mappings().all()
+    return {"product_lines": [dict(row) for row in rows]}
+
+
+def _json_value(value):
+    if isinstance(value, dict):
+        return value
+    try:
+        return json.loads(value) if value else {}
+    except (TypeError, json.JSONDecodeError):
+        return {}
+
+
+def _assessor_document(row: dict) -> dict:
+    extracted = _json_value(row.get("extracted_data"))
+    validation = extracted.get("document_validation") or {}
+    return {"document_id": str(row["document_id"]), "document_type": row["document_type"], "file_name": row["original_file_name"], "mime_type": row["mime_type"], "file_size_bytes": row["file_size_bytes"], "uploaded_at": row["uploaded_at"], "confidence": row["extraction_confidence"], "structured_data": extracted.get("structured_data", {}), "validation": validation}
+
+
+def _audit_entry(row: dict) -> dict:
+    details = _json_value(row.get("details"))
+    return {"timestamp": row["timestamp"], "action": row["action"], "actor": row["actor"], "details": details if isinstance(details, str) else json.dumps(details, default=str)}
+
+
+def _customer_message_for_human_decision(decision: str) -> str:
+    return {"settle": "Your claim has been approved and will proceed to settlement.", "reject": "We are unable to approve this claim. Please review the decision details for the applicable reason.", "route_to_human": "Your claim has been escalated for further specialist review."}[decision]
 
 
 @app.get("/internal/operations")

@@ -1,13 +1,18 @@
 import { Card, Button, ClaimStatusBadge, ProductBadge, RiskBadge, PageHeader, Amount, Alert } from '../../components/UI';
-import { ASSESSOR_CLAIMS } from '../../data';
+import { useEffect, useState } from 'react';
+import { getAssessorQueue } from '../../api';
+import type { AssessorClaim } from '../../types';
 import type { Screen } from '../../types';
 
 interface AssessorQueueProps {
+  token: string;
   navigate: (screen: Screen, params?: Record<string, string>) => void;
 }
 
-export default function AssessorQueue({ navigate }: AssessorQueueProps) {
-  const queue = ASSESSOR_CLAIMS;
+export default function AssessorQueue({ token, navigate }: AssessorQueueProps) {
+  const [queue, setQueue] = useState<AssessorClaim[]>([]);
+  const [error, setError] = useState('');
+  useEffect(() => { getAssessorQueue(token).then(setQueue).catch(e => setError(e.message || 'Unable to load review queue.')); }, [token]);
   const highRisk = queue.filter(c => c.riskStatus === 'HIGH').length;
   const escalated = queue.filter(c => c.aiRecommendation === 'ESCALATE').length;
 
@@ -17,6 +22,7 @@ export default function AssessorQueue({ navigate }: AssessorQueueProps) {
         title="Human Review Queue"
         subtitle={`${queue.length} claims awaiting assessor review`}
       />
+      {error && <Alert variant="error">{error}</Alert>}
 
       {/* Summary stats */}
       <div className="grid grid-cols-3 gap-4 mb-6">

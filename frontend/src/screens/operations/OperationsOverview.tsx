@@ -1,5 +1,6 @@
-import { Card, PageHeader, Amount, ProgressBar } from '../../components/UI';
-import { OPERATIONS_DATA } from '../../data';
+import { useEffect, useState } from 'react';
+import { Card, PageHeader, ProgressBar } from '../../components/UI';
+import { getOperationsOverview } from '../../api';
 
 const PRODUCT_STYLES: Record<string, { icon: string; bg: string; text: string; accent: string }> = {
   HEALTH: { icon: '🏥', bg: 'bg-emerald-50', text: 'text-emerald-700', accent: 'bg-emerald-500' },
@@ -15,11 +16,15 @@ const LABELS: Record<string, string> = {
   TRAVEL: 'Travel',
 };
 
-export default function OperationsOverview() {
-  const lines = Object.keys(OPERATIONS_DATA) as (keyof typeof OPERATIONS_DATA)[];
+interface OperationsOverviewProps { token: string; }
+
+export default function OperationsOverview({ token }: OperationsOverviewProps) {
+  const [data, setData] = useState<Record<string, { processed: number; approved: number; routed: number; rejected: number; riskFlagged: number }>>({});
+  useEffect(() => { getOperationsOverview(token).then(result => setData(Object.fromEntries(result.product_lines.map(row => [row.product_line, { processed: Number(row.processed), approved: Number(row.approved), routed: Number(row.routed), rejected: Number(row.rejected), riskFlagged: Number(row.risk_flagged) }])))).catch(() => setData({})); }, [token]);
+  const lines = Object.keys(data);
   const totals = lines.reduce(
     (acc, line) => {
-      const d = OPERATIONS_DATA[line];
+      const d = data[line];
       acc.processed += d.processed;
       acc.approved += d.approved;
       acc.routed += d.routed;
@@ -61,7 +66,7 @@ export default function OperationsOverview() {
       {/* Product line breakdown */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 mb-8">
         {lines.map(line => {
-          const d = OPERATIONS_DATA[line];
+          const d = data[line];
           const style = PRODUCT_STYLES[line];
           const approvalRate = d.processed > 0 ? ((d.approved / d.processed) * 100).toFixed(0) : '0';
 
@@ -125,7 +130,7 @@ export default function OperationsOverview() {
             </thead>
             <tbody className="divide-y divide-gray-100">
               {lines.map(line => {
-                const d = OPERATIONS_DATA[line];
+                const d = data[line];
                 const style = PRODUCT_STYLES[line];
                 const rate = d.processed > 0 ? ((d.approved / d.processed) * 100).toFixed(1) : '—';
                 return (

@@ -136,11 +136,12 @@ export default function App() {
       {/* Assessor screens */}
       {role === 'assessor' && (
         <>
-          {screen === 'assessor-queue' && <AssessorQueue navigate={navigate} />}
-          {screen === 'assessor-claims' && <AssessorClaims navigate={navigate} />}
+          {screen === 'assessor-queue' && <AssessorQueue token={token || ''} navigate={navigate} />}
+          {screen === 'assessor-claims' && <AssessorClaims token={token || ''} navigate={navigate} />}
           {screen === 'assessor-review' && (
             <AssessorReview
               claimId={selectedAssessorClaimId || 'clm-004'}
+              token={token || ''}
               navigate={navigate}
             />
           )}
@@ -148,7 +149,7 @@ export default function App() {
       )}
 
       {/* Operations screen */}
-      {role === 'operations' && <OperationsOverview />}
+      {role === 'operations' && <OperationsOverview token={token || ''} />}
     </Layout>
   );
 }

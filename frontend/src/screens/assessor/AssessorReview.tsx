@@ -1,37 +1,52 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Button, Card, ClaimStatusBadge, ProductBadge, RiskBadge, PageHeader, Amount, Alert, DataRow, TabBar, DocStatusChip,
 } from '../../components/UI';
-import { ASSESSOR_CLAIMS } from '../../data';
-import type { Screen } from '../../types';
+import { getAssessorClaim, submitAssessorDecision } from '../../api';
+import type { AssessorClaim, Screen } from '../../types';
 
 interface AssessorReviewProps {
   claimId: string;
+  token: string;
   navigate: (screen: Screen, params?: Record<string, string>) => void;
 }
 
 type TabId = 'Extracted Data' | 'Handbook Evidence' | 'Risk' | 'Audit Trail';
 type Decision = '' | 'APPROVE' | 'REJECT' | 'ROUTE' | 'OVERRIDE';
 
-export default function AssessorReview({ claimId, navigate }: AssessorReviewProps) {
+export default function AssessorReview({ claimId, token, navigate }: AssessorReviewProps) {
   const [activeTab, setActiveTab] = useState<TabId>('Extracted Data');
   const [decision, setDecision] = useState<Decision>('');
   const [overrideReason, setOverrideReason] = useState('');
+  const [overrideDecision, setOverrideDecision] = useState<'settle' | 'reject' | 'route_to_human'>('route_to_human');
   const [rejectReason, setRejectReason] = useState('');
   const [submitted, setSubmitted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [claim, setClaim] = useState<AssessorClaim | null>(null);
+  const [error, setError] = useState('');
 
-  const claim = ASSESSOR_CLAIMS.find(c => c.id === claimId) || ASSESSOR_CLAIMS[0];
+  useEffect(() => { setClaim(null); getAssessorClaim(token, claimId).then(setClaim).catch(e => setError(e.message || 'Unable to load claim review.')); }, [token, claimId]);
 
-  const handleDecisionSubmit = () => {
+  const handleDecisionSubmit = async () => {
     if (!decision) return;
-    if ((decision === 'OVERRIDE' || decision === 'REJECT') && !overrideReason && !rejectReason) return;
+    const reason = decision === 'OVERRIDE' ? overrideReason : rejectReason;
+    if ((decision === 'OVERRIDE' || decision === 'REJECT') && !reason.trim()) return;
     setSubmitting(true);
-    setTimeout(() => {
+    try {
+      await submitAssessorDecision(token, claimId, {
+        action: decision === 'APPROVE' ? 'settle' : decision === 'REJECT' ? 'reject' : decision === 'ROUTE' ? 'route_to_human' : 'override',
+        reason: reason || undefined,
+        override_decision: decision === 'OVERRIDE' ? overrideDecision : undefined,
+      });
       setSubmitting(false);
       setSubmitted(true);
-    }, 1200);
+    } catch (requestError) {
+      setSubmitting(false);
+      setError(requestError instanceof Error ? requestError.message : 'Unable to save assessor decision.');
+    }
   };
+
+  if (!claim) return <div className="p-6">{error ? <Alert variant="error">{error}</Alert> : 'Loading claim review...'}</div>;
 
   if (submitted) {
     return (
@@ -324,6 +339,13 @@ export default function AssessorReview({ claimId, navigate }: AssessorReviewProp
                   rows={4}
                   className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-axa-blue focus:border-transparent resize-none"
                 />
+                {decision === 'OVERRIDE' && (
+                  <select value={overrideDecision} onChange={e => setOverrideDecision(e.target.value as typeof overrideDecision)} className="w-full mt-2 px-3 py-2 text-sm border border-gray-300 rounded-lg">
+                    <option value="settle">Override to approve / settle</option>
+                    <option value="reject">Override to reject</option>
+                    <option value="route_to_human">Keep / route for specialist review</option>
+                  </select>
+                )}
                 {decision === 'OVERRIDE' && !overrideReason && (
                   <p className="text-xs text-red-500 mt-1">Override reason is required.</p>
                 )}

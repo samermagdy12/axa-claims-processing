@@ -41,6 +41,7 @@ export interface Decision {
   handbookClause?: string;
   missingDocuments?: string[];
   customerMessage?: string;
+  decisionTrace?: { rule: string; result: 'passed' | 'failed' | 'skipped'; details: string }[];
   llmRecommendation?: string;
 }
 

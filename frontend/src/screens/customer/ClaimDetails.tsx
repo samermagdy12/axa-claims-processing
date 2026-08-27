@@ -387,6 +387,7 @@ function DecisionCard({ claim }: { claim: Claim }) {
       <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Decision Details</p>
       {claim.decision.outcome && <DataRow label="Final system decision" value={claim.decision.outcome.replaceAll('_', ' ')} />}
       {claim.decision.reason && <p className="text-sm text-gray-600 mt-3">{claim.decision.reason}</p>}
+      {!!claim.decision.decisionTrace?.length && <div className="mt-4 border-t pt-3"><p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Decision trace</p>{claim.decision.decisionTrace.map((item, index) => <div key={`${item.rule}-${index}`} className="text-sm mt-2"><span className={item.result === 'passed' ? 'text-green-700' : item.result === 'failed' ? 'text-red-700' : 'text-gray-500'}>{item.result === 'passed' ? '✓' : item.result === 'failed' ? '×' : '–'} {item.rule.replaceAll('_', ' ')}</span><p className="text-gray-600 ml-4">{item.details}</p></div>)}</div>}
       {claim.status === 'APPROVED' && (
         <div className="space-y-2">
           <DataRow label="Claimed" value={<Amount value={claim.claimedAmount} size="sm" />} />

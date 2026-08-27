@@ -60,6 +60,7 @@ def decide_claim(*, claim: dict[str, Any], policy: dict[str, Any], processing: d
         "triggered_rules": rules or [final],
         "reason": final["reason"],
         "reason_code": final["rule_id"],
+        "decision_trace": _decision_trace(claim, policy, processing, analysis, duplicate_detection, rules, final),
         "missing_documents": missing,
         "customer_message": _customer_message(decision),
         "handbook_references": analysis.get("retrieved_handbook_references") or [],
@@ -179,6 +180,23 @@ def _uncertainty_reason(analysis: dict[str, Any]) -> str:
 
 def _money(value: Decimal | None) -> str:
     return f"{value:,.2f}" if value is not None else "unknown"
+
+
+def _decision_trace(claim, policy, processing, analysis, duplicate_detection, rules, final):
+    """Persist a readable ordered audit trail, including rules that passed."""
+    triggered = {rule["rule_id"] for rule in rules}
+    amount = _decimal(claim.get("claimed_amount")); remaining = _decimal(policy.get("remaining_limit"))
+    items = [
+        ("required_documents", "MISSING_REQUIRED_DOCUMENT" not in triggered, "All required documents were uploaded." if not processing.get("missing_documents") else f"Missing: {', '.join(map(str, processing['missing_documents']))}."),
+        ("document_validation", "INVALID_DOCUMENT" not in triggered and not processing.get("manual_review_required"), "Uploaded documents were validated." if not processing.get("invalid_documents") else "One or more uploaded documents were invalid."),
+        ("policy_status", "POLICY_VALIDATION_FAILED" not in triggered, "The policy is active and covers the incident date." if _policy_is_valid(policy) else _policy_failure_reason(claim, policy)),
+        ("claim_amount", "CLAIM_AMOUNT_ABOVE_AUTO_APPROVAL_LIMIT" not in triggered, "The claimed amount is within the automatic approval limit." if amount is not None and amount <= AUTO_SETTLEMENT_LIMIT_EGP else f"Claimed amount is EGP {_money(amount)}; automatic limit is EGP 10,000."),
+        ("remaining_limit", "INSUFFICIENT_REMAINING_LIMIT" not in triggered, "The remaining policy limit is sufficient." if remaining is not None and amount is not None and remaining >= amount else "The remaining policy limit is insufficient or unavailable."),
+        ("duplicate_check", "POSSIBLE_DUPLICATE_CLAIM" not in triggered, "No duplicate claim was found." if not _duplicate_detected(processing, duplicate_detection) else "A possible duplicate claim was found."),
+        ("coverage_evidence", _supported_settlement(analysis, policy) or _supported_exclusion(analysis, policy), "Applicable handbook evidence was cited." if (_supported_settlement(analysis, policy) or _supported_exclusion(analysis, policy)) else f"No applicable coverage and settlement evidence was accepted for {policy.get('product_line', 'this')} / {claim.get('claim_type', 'claim')}.")]
+    trace = [{"rule": rule, "result": "passed" if passed else "failed", "details": details} for rule, passed, details in items]
+    trace.append({"rule": "final_decision", "result": "passed", "details": f"{final['outcome']}: {final['reason']}"})
+    return trace
 
 
 def _rule(rule_id: str, outcome: str, reason: str) -> dict[str, str]:

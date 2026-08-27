@@ -132,11 +132,11 @@ def get_my_claims(current_user: dict = Depends(require_roles(CUSTOMER_ROLE)), db
                    c.claim_type, c.incident_date, c.submission_date,
                    c.claimed_amount, c.description, c.status,
                    latest_decision.outcome AS final_decision, latest_decision.reason AS decision_reason,
-                   latest_decision.customer_message, latest_decision.handbook_clause
+                   latest_decision.customer_message, latest_decision.handbook_clause, latest_decision.decision_trace
             FROM claims c
             JOIN policies p ON p.policy_id = c.policy_id
             LEFT JOIN LATERAL (
-                SELECT outcome, reason, customer_message, handbook_clause FROM decisions
+                SELECT outcome, reason, customer_message, handbook_clause, decision_trace FROM decisions
                 WHERE claim_id = c.claim_id ORDER BY created_at DESC LIMIT 1
             ) latest_decision ON TRUE
             WHERE p.user_id = :user_id
@@ -155,11 +155,11 @@ def get_claim(claim_id: str, current_user: dict = Depends(require_roles(CUSTOMER
                    c.claim_type, c.incident_date, c.submission_date,
                    c.claimed_amount, c.description, c.status,
                    latest_decision.outcome AS final_decision, latest_decision.reason AS decision_reason,
-                   latest_decision.customer_message, latest_decision.handbook_clause
+                   latest_decision.customer_message, latest_decision.handbook_clause, latest_decision.decision_trace
             FROM claims c
             JOIN policies p ON p.policy_id = c.policy_id
             LEFT JOIN LATERAL (
-                SELECT outcome, reason, customer_message, handbook_clause FROM decisions
+                SELECT outcome, reason, customer_message, handbook_clause, decision_trace FROM decisions
                 WHERE claim_id = c.claim_id ORDER BY created_at DESC LIMIT 1
             ) latest_decision ON TRUE
             WHERE c.claim_id = :claim_id AND p.user_id = :user_id
@@ -559,9 +559,9 @@ def _run_automatic_pipeline(claim_id: str, current_user: dict, db: Session) -> d
             "policy_validation_detail": analysis_result.get("policy_validation"),
         }
         db.execute(text("UPDATE claims SET status = :status, updated_at = CURRENT_TIMESTAMP WHERE claim_id = :claim_id"), {"status": claim_status, "claim_id": claim_id})
-        db.execute(text("""INSERT INTO decisions (claim_id, outcome, reason, handbook_clause, risk_detected, risk_reason, customer_message)
-                         VALUES (:claim_id, :outcome, :reason, :handbook_clause, :risk_detected, :risk_reason, :customer_message)"""), {
-            "claim_id": claim_id, "outcome": result["final_decision"], "reason": result["reason"], "handbook_clause": handbook_clause,
+        db.execute(text("""INSERT INTO decisions (claim_id, outcome, reason, decision_trace, handbook_clause, risk_detected, risk_reason, customer_message)
+                         VALUES (:claim_id, :outcome, :reason, CAST(:decision_trace AS jsonb), :handbook_clause, :risk_detected, :risk_reason, :customer_message)"""), {
+            "claim_id": claim_id, "outcome": result["final_decision"], "reason": result["reason"], "decision_trace": json.dumps(result["decision_trace"], default=str), "handbook_clause": handbook_clause,
             "risk_detected": result["human_review_required"], "risk_reason": result["reason"] if result["human_review_required"] else None,
             "customer_message": result["customer_message"],
         })
@@ -612,6 +612,7 @@ def _claim_response(claim: dict) -> dict:
             "reason": claim.pop("decision_reason", None),
             "customer_message": claim.pop("customer_message", None),
             "handbook_clause": claim.pop("handbook_clause", None),
+            "decision_trace": _json_value(claim.pop("decision_trace", None)),
         }
     else:
         claim.pop("decision_reason", None)

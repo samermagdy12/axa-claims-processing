@@ -243,6 +243,8 @@ CREATE TABLE decisions (
 
     reason TEXT,
 
+    decision_trace JSONB,
+
     handbook_clause VARCHAR(50),
 
     risk_detected BOOLEAN NOT NULL DEFAULT FALSE,

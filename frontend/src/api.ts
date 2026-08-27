@@ -69,7 +69,7 @@ type ApiClaim = {
   claim_id: string; policy_id: string; policy_number: string; product_line: Claim['productLine'];
   claim_type: string; incident_date: string; submission_date: string; claimed_amount: number;
   description: string | null; status: Claim['status'];
-  final_decision?: { final_decision: string; reason?: string | null; customer_message?: string | null; handbook_clause?: string | null } | null;
+  final_decision?: { final_decision: string; reason?: string | null; customer_message?: string | null; handbook_clause?: string | null; decision_trace?: { rule: string; result: 'passed' | 'failed' | 'skipped'; details: string }[] } | null;
   required_documents?: { document_type: string; status: 'MISSING' | 'UPLOADED' | 'VERIFIED'; original_file_name?: string | null }[];
 };
 
@@ -105,7 +105,7 @@ function toClaim(claim: ApiClaim): Claim {
     productLine: claim.product_line, claimType: claim.claim_type, incidentDate: claim.incident_date,
     submissionDate: claim.submission_date, claimedAmount: Number(claim.claimed_amount),
     description: claim.description || '', status: claim.status, documents,
-    decision: claim.final_decision ? { outcome: claim.final_decision.final_decision, reason: claim.final_decision.reason || undefined, customerMessage: claim.final_decision.customer_message || undefined, handbookClause: claim.final_decision.handbook_clause || undefined, missingDocuments: documents.filter(document => document.status === 'MISSING').map(document => document.type) } : claim.status === 'WAITING_FOR_DOCUMENTS' ? { outcome: 'request_documents', missingDocuments: documents.filter(document => document.status === 'MISSING').map(document => document.type) } : undefined,
+    decision: claim.final_decision ? { outcome: claim.final_decision.final_decision, reason: claim.final_decision.reason || undefined, customerMessage: claim.final_decision.customer_message || undefined, handbookClause: claim.final_decision.handbook_clause || undefined, decisionTrace: claim.final_decision.decision_trace || [], missingDocuments: documents.filter(document => document.status === 'MISSING').map(document => document.type) } : claim.status === 'WAITING_FOR_DOCUMENTS' ? { outcome: 'request_documents', missingDocuments: documents.filter(document => document.status === 'MISSING').map(document => document.type) } : undefined,
   };
 }
 export async function getMyPolicies(token: string): Promise<Policy[]> { return (await request<ApiPolicy[]>('/policies/my', { headers: { Authorization: `Bearer ${token}` } })).map(toPolicy); }

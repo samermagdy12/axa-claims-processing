@@ -45,10 +45,10 @@ class ClaimAnalysisApiTests(unittest.TestCase):
             "missing_information": [], "validation_issues": [], "consistency_issues": [], "recommended_next_actions": ["Assign an assessor"],
             "retrieved_handbook_references": [{"chunk_id": "handbook-0-2", "rule_identifier": "0.2"}], "retrieval": {"query": "motor collision", "results": [{"chunk_id": "handbook-0-2"}]}, "provider": "openrouter",
         }
-        with patch("app.main.analyze_claim_context", return_value=analysis) as run_analysis:
+        with patch("app.main.analyze_claim_with_tools", return_value=analysis) as run_analysis:
             result = analyze_claim("claim-1", {"user_id": "customer-1", "role_name": "Customer"}, AnalysisDatabase())
         self.assertEqual(result["claim_id"], "claim-1")
         self.assertEqual(result["recommendation"], "route_to_human")
         self.assertEqual(result["retrieved_handbook_references"][0]["rule_identifier"], "0.2")
-        context = run_analysis.call_args.args[0]
-        self.assertEqual(context["documents"][0]["structured_data"]["total"], 7500)
+        executor = run_analysis.call_args.args[0]
+        self.assertEqual(executor.claim_id, "claim-1")

@@ -9,6 +9,8 @@ from sqlalchemy.orm import Session
 
 from app.auth import ASSESSOR_ROLE, CUSTOMER_ROLE, OPERATIONS_ROLE, create_access_token, get_current_user, hash_password, require_roles, verify_password
 from app.claim_analysis import analyze_claim_context, build_claim_context
+from app.claim_analysis_agent import analyze_claim_with_tools
+from app.claim_tools import ClaimToolExecutor
 from app.claim_analysis_llm import ClaimAnalysisError
 from app.decision_engine import decide_claim
 from app.claim_requirements import get_required_documents
@@ -500,7 +502,9 @@ def analyze_claim(claim_id: str, current_user: dict = Depends(get_current_user),
                 "reasoning": [], "missing_information": processing["missing_documents"], "validation_issues": [item.get("document_type") for item in processing["invalid_documents"]],
                 "consistency_issues": [], "recommended_next_actions": ["Provide or replace the required documents."], "retrieved_handbook_references": [], "retrieval": {"results": []}, "provider": "deterministic"}
     try:
-        analysis = analyze_claim_context(build_claim_context(claim_data, policy, documents, processing))
+        # The analysis model receives only the active claim ID initially and
+        # dynamically requests authorized evidence through real tool calls.
+        analysis = analyze_claim_with_tools(ClaimToolExecutor(claim_id, current_user, db))
     except (HandbookKnowledgeError, ClaimAnalysisError) as exc:
         # Never leave a complete customer claim in limbo because an external
         # reasoning provider is unavailable. The deterministic engine will
@@ -523,7 +527,7 @@ def _run_automatic_pipeline(claim_id: str, current_user: dict, db: Session) -> d
     """Persist the deterministic lifecycle after documents are extracted."""
     analysis_result = analyze_claim(claim_id, current_user, db)
     claim = db.execute(
-        text("""SELECT c.claim_id, c.claimed_amount, p.status AS policy_status, p.product_line
+        text("""SELECT c.claim_id, c.claimed_amount, c.incident_date, p.status AS policy_status, p.product_line, p.start_date, p.end_date
                  FROM claims c JOIN policies p ON p.policy_id = c.policy_id
                  WHERE c.claim_id = :claim_id"""), {"claim_id": claim_id}
     ).mappings().first()
@@ -533,6 +537,7 @@ def _run_automatic_pipeline(claim_id: str, current_user: dict, db: Session) -> d
     policy_for_decision = {
         "status": claim["policy_status"],
         "product_line": claim["product_line"],
+        "start_date": claim["start_date"], "end_date": claim["end_date"],
         "remaining_limit": analysis_result.get("policy", {}).get("remaining_limit"),
         "validation_passed": (analysis_result.get("policy_validation") or {}).get("passed", False),
     }

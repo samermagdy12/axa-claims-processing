@@ -20,35 +20,36 @@ def decide_claim(*, claim: dict[str, Any], policy: dict[str, Any], processing: d
     missing = processing.get("missing_documents") or []
     invalid = processing.get("invalid_documents") or []
     if missing:
-        rules.append(_rule("MISSING_REQUIRED_DOCUMENTS", "request_documents", f"Missing required documents: {', '.join(map(str, missing))}."))
+        rules.append(_rule("MISSING_REQUIRED_DOCUMENT", "request_documents", f"Processing is on hold because the required {', '.join(map(str, missing))} has not been uploaded."))
     if invalid:
-        rules.append(_rule("INVALID_DOCUMENTS", "request_documents", "One or more uploaded documents do not match the required document type."))
+        names = ", ".join(str(item.get("document_type") or item.get("document_id") or "document") for item in invalid if isinstance(item, dict))
+        rules.append(_rule("INVALID_DOCUMENT", "request_documents", f"Processing is on hold because the uploaded {names or 'document'} could not be validated as the required document type."))
 
     if not _policy_is_valid(policy):
-        rules.append(_rule("POLICY_VALIDATION_FAILED", "reject", "The policy is inactive or does not cover the incident date."))
+        rules.append(_rule("POLICY_VALIDATION_FAILED", "reject", _policy_failure_reason(claim, policy)))
     elif _supported_exclusion(analysis, policy):
-        rules.append(_rule("COVERAGE_EXCLUSION_SUPPORTED", "reject", "The claim is clearly excluded or not covered by the retrieved policy terms."))
+        rules.append(_rule("POLICY_EXCLUSION_APPLIES", "reject", _exclusion_reason(analysis)))
 
     amount = _decimal(claim.get("claimed_amount"))
     if amount is not None and amount > AUTO_SETTLEMENT_LIMIT_EGP:
-        rules.append(_rule("AMOUNT_OVER_AUTO_SETTLEMENT_LIMIT", "route_to_human", "Claim amount exceeds the EGP 10,000 automatic settlement limit."))
+        rules.append(_rule("CLAIM_AMOUNT_ABOVE_AUTO_APPROVAL_LIMIT", "route_to_human", f"Human review is required because the claimed amount of EGP {_money(amount)} exceeds the automatic approval limit of EGP 10,000."))
     if processing.get("consistency", {}).get("has_conflicts"):
-        rules.append(_rule("CONSISTENCY_CONFLICT", "route_to_human", "Conflicting information was found across claim documents."))
+        rules.append(_rule("DOCUMENT_CONFLICT", "route_to_human", _conflict_reason(processing)))
     if _duplicate_detected(processing, duplicate_detection):
-        rules.append(_rule("DUPLICATE_DETECTED", "route_to_human", "A possible duplicate claim or document requires specialist review."))
+        rules.append(_rule("POSSIBLE_DUPLICATE_CLAIM", "route_to_human", "Human review is required because another claim with the same policy, claim type, incident date, and claimed amount was detected."))
     if risk_signals:
-        rules.append(_rule("RISK_SIGNAL", "route_to_human", "This claim requires specialist review."))
+        rules.append(_rule("RISK_SIGNAL_DETECTED", "route_to_human", "Human review is required because a deterministic risk indicator was detected."))
     if processing.get("manual_review_required"):
-        rules.append(_rule("MANUAL_REVIEW_REQUIRED", "route_to_human", "The available document information requires specialist review."))
+        rules.append(_rule("MANUAL_REVIEW_REQUIRED", "route_to_human", "Human review is required because document validation found information that could not be resolved automatically."))
     if amount is not None and _decimal(policy.get("remaining_limit")) is not None and _decimal(policy.get("remaining_limit")) < amount:
-        rules.append(_rule("INSUFFICIENT_REMAINING_LIMIT", "route_to_human", "The claim amount exceeds the policy's remaining limit."))
+        rules.append(_rule("INSUFFICIENT_REMAINING_LIMIT", "route_to_human", f"Human review is required because the remaining policy limit of EGP {_money(_decimal(policy.get('remaining_limit')))} is lower than the claimed amount of EGP {_money(amount)}."))
     if analysis.get("recommendation") == "route_to_human":
-        rules.append(_rule("LLM_RECOMMENDS_HUMAN_REVIEW", "route_to_human", "The evidence-based analysis recommends specialist review."))
+        rules.append(_rule("POLICY_COVERAGE_UNCERTAIN", "route_to_human", _uncertainty_reason(analysis)))
 
     if _eligible_to_settle(claim, policy, processing, analysis, amount):
-        rules.append(_rule("AUTO_SETTLEMENT_ELIGIBLE", "settle", "All automatic-settlement conditions passed."))
+        rules.append(_rule("AUTO_APPROVED", "settle", "The claim was automatically approved because all required documents were validated, the policy was active on the incident date, the claimed amount was within the automatic approval limit, sufficient policy limit remained, no duplicate or conflict was detected, and retrieved policy evidence supports coverage."))
 
-    final = next((rule for outcome in ("request_documents", "reject", "route_to_human", "settle") for rule in rules if rule["outcome"] == outcome), _rule("INSUFFICIENT_EVIDENCE", "route_to_human", "The claim cannot be safely decided automatically."))
+    final = next((rule for outcome in ("request_documents", "reject", "route_to_human", "settle") for rule in rules if rule["outcome"] == outcome), _rule("INSUFFICIENT_HANDBOOK_EVIDENCE", "route_to_human", "Human review is required because the available policy evidence does not provide sufficient support for an automatic coverage decision."))
     decision = final["outcome"]
     return {
         "llm_recommendation": analysis.get("recommendation") if analysis.get("recommendation") in ALLOWED_DECISIONS else "route_to_human",
@@ -58,6 +59,7 @@ def decide_claim(*, claim: dict[str, Any], policy: dict[str, Any], processing: d
         "human_review_required": decision == "route_to_human",
         "triggered_rules": rules or [final],
         "reason": final["reason"],
+        "reason_code": final["rule_id"],
         "missing_documents": missing,
         "customer_message": _customer_message(decision),
         "handbook_references": analysis.get("retrieved_handbook_references") or [],
@@ -146,6 +148,37 @@ def _decimal(value: Any) -> Decimal | None:
         return Decimal(str(value))
     except Exception:
         return None
+
+
+def _policy_failure_reason(claim: dict[str, Any], policy: dict[str, Any]) -> str:
+    incident, end = claim.get("incident_date"), policy.get("end_date")
+    if incident and end:
+        return f"The claim was rejected because the incident date {incident} falls outside the active policy period, which ended on {end}."
+    return "The claim was rejected because the policy is not active for the incident date."
+
+
+def _exclusion_reason(analysis: dict[str, Any]) -> str:
+    for finding in analysis.get("decision_findings") or analysis.get("reasoning") or []:
+        if isinstance(finding, dict) and str(finding.get("reason") or finding.get("finding") or "").strip():
+            return f"The claim was rejected because {str(finding.get('reason') or finding.get('finding')).strip()}"
+    return "The claim was rejected because an applicable retrieved policy clause explicitly excludes the reported loss from coverage."
+
+
+def _conflict_reason(processing: dict[str, Any]) -> str:
+    conflict = (processing.get("consistency", {}).get("conflicts") or [{}])[0]
+    field = str(conflict.get("field") or "information")
+    return f"Human review is required because conflicting {field.replace('_', ' ')} information was extracted from the uploaded documents."
+
+
+def _uncertainty_reason(analysis: dict[str, Any]) -> str:
+    for finding in analysis.get("decision_findings") or []:
+        if isinstance(finding, dict) and finding.get("outcome") == "uncertain" and finding.get("reason"):
+            return str(finding["reason"])
+    return "Human review is required because the available policy evidence does not provide sufficient support for an automatic coverage decision."
+
+
+def _money(value: Decimal | None) -> str:
+    return f"{value:,.2f}" if value is not None else "unknown"
 
 
 def _rule(rule_id: str, outcome: str, reason: str) -> dict[str, str]:

@@ -14,7 +14,7 @@ from app.claim_tools import ClaimToolExecutor
 from app.claim_analysis_llm import ClaimAnalysisError
 from app.decision_engine import decide_claim
 from app.claim_requirements import get_required_documents
-from app.claim_processing import build_claim_processing_summary, normalize_document_data, present_document_validation, validate_document
+from app.claim_processing import build_claim_processing_summary, canonical_document_type, normalize_document_data, present_document_validation, validate_document
 from app.config import settings
 from app.database import get_db
 from app.document_extraction import DocumentExtractionError, extract_document_content
@@ -219,6 +219,9 @@ async def upload_claim_document(
         {"claim_id": claim_id, "document_type": document_type},
     ).mappings().first()
     if required_document is None:
+        candidates = db.execute(text("SELECT claim_required_document_id, document_type, is_required, status FROM claim_required_documents WHERE claim_id = :claim_id AND is_required = TRUE"), {"claim_id": claim_id}).mappings().all()
+        required_document = next((row for row in candidates if canonical_document_type(row["document_type"]) == canonical_document_type(document_type)), None)
+    if required_document is None:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="This document is not required for the claim")
     if required_document["status"] != "MISSING":
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="This required document has already been uploaded")
@@ -232,7 +235,7 @@ async def upload_claim_document(
                 VALUES (:claim_id, :document_type, :document_url, :original_file_name, :mime_type, :file_size_bytes, :uploaded_by)
                 RETURNING document_id, claim_id, document_type, original_file_name, mime_type, file_size_bytes, uploaded_at
             """),
-            {"claim_id": claim_id, "document_type": document_type, "document_url": document_url, "original_file_name": safe_file_name, "mime_type": file.content_type or "application/octet-stream", "file_size_bytes": len(content), "uploaded_by": current_user["user_id"]},
+            {"claim_id": claim_id, "document_type": required_document["document_type"], "document_url": document_url, "original_file_name": safe_file_name, "mime_type": file.content_type or "application/octet-stream", "file_size_bytes": len(content), "uploaded_by": current_user["user_id"]},
         ).mappings().one()
         required_document = db.execute(
             text("""
@@ -527,7 +530,7 @@ def _run_automatic_pipeline(claim_id: str, current_user: dict, db: Session) -> d
     """Persist the deterministic lifecycle after documents are extracted."""
     analysis_result = analyze_claim(claim_id, current_user, db)
     claim = db.execute(
-        text("""SELECT c.claim_id, c.claimed_amount, c.incident_date, p.status AS policy_status, p.product_line, p.start_date, p.end_date
+        text("""SELECT c.claim_id, c.claim_type, c.claimed_amount, c.incident_date, p.status AS policy_status, p.product_line, p.start_date, p.end_date
                  FROM claims c JOIN policies p ON p.policy_id = c.policy_id
                  WHERE c.claim_id = :claim_id"""), {"claim_id": claim_id}
     ).mappings().first()

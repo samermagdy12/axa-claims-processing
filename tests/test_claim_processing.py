@@ -20,6 +20,10 @@ class ClaimProcessingTests(unittest.TestCase):
         unclear = validate_document("Photos of Damage", "", {"content_matches_expected": True, "confidence": .5}, mime_type="image/jpeg")
         self.assertIsNone(unclear["validation_passed"])
 
+    def test_required_document_matching_uses_canonical_ids_not_display_punctuation(self):
+        result = build_claim_processing_summary([{"document_type": "Driver's Licence", "is_required": True}], [{"document_id": "d", "document_type": "Driver’s   Licence", "validation": {"validation_passed": True}, "normalized_data": {"fields": {}}}])
+        self.assertEqual(result["missing_documents"], [])
+
     def test_validation_detects_a_wrong_document_type(self):
         result = validate_document("Repair Estimate", "MEDICAL REPORT\nPatient: Mona Adel\nDiagnosis: Minor injury", {"patient_name": "Mona Adel", "diagnosis": "Minor injury"})
         self.assertFalse(result["validation_passed"])

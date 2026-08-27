@@ -8,6 +8,11 @@ from typing import Any
 
 
 VISUAL_EVIDENCE_DOCUMENT_TYPES = {"Photos of Damage", "Spare Key"}
+
+
+def canonical_document_type(value: str | None) -> str:
+    """Stable matching key; display labels remain unchanged in persistence/UI."""
+    return re.sub(r"[^a-z0-9]+", "_", (value or "").replace("’", "'").casefold()).strip("_")
 _TYPE_HINTS = {
     "Driver's Licence": ("driver", "licence", "license", "date of birth"),
     "Vehicle Registration": ("vehicle registration", "registration number", "vin", "chassis"),
@@ -118,8 +123,10 @@ def check_cross_document_consistency(documents: list[dict[str, Any]]) -> dict[st
 def build_claim_processing_summary(required_documents: list[dict[str, Any]], documents: list[dict[str, Any]]) -> dict[str, Any]:
     required_types = [item["document_type"] for item in required_documents if item.get("is_required", True)]
     uploaded_types = [item.get("document_type") for item in documents]
-    missing = [document_type for document_type in required_types if document_type not in uploaded_types]
-    duplicates = sorted({document_type for document_type in uploaded_types if document_type and uploaded_types.count(document_type) > 1})
+    uploaded_keys = {canonical_document_type(value) for value in uploaded_types}
+    missing = [document_type for document_type in required_types if canonical_document_type(document_type) not in uploaded_keys]
+    duplicate_keys = {canonical_document_type(value) for value in uploaded_types if value and sum(canonical_document_type(other) == canonical_document_type(value) for other in uploaded_types) > 1}
+    duplicates = sorted({value for value in uploaded_types if canonical_document_type(value) in duplicate_keys})
     invalid = [item for item in documents if (item.get("validation") or {}).get("validation_passed") is False]
     consistency = check_cross_document_consistency(documents)
     if invalid:

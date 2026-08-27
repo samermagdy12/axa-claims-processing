@@ -30,18 +30,29 @@ _FIELD_ALIASES = {
 }
 
 
-def validate_document(expected_document_type: str, raw_text: str, structured_data: dict[str, Any] | None) -> dict[str, Any]:
+def validate_document(expected_document_type: str, raw_text: str, structured_data: dict[str, Any] | None, *, mime_type: str | None = None, processing_strategy: str | None = None) -> dict[str, Any]:
     if expected_document_type in VISUAL_EVIDENCE_DOCUMENT_TYPES:
-        return {"expected_document_type": expected_document_type, "detected_document_type": expected_document_type, "validation_passed": True, "confidence": None, "reason": "Visual evidence is preserved without document-type classification."}
+        if not (mime_type or "").lower().startswith("image/"):
+            return {"expected_document_type": expected_document_type, "detected_document_type": _detect_text_document_type(raw_text, structured_data), "validation_passed": False, "confidence": None, "manual_review_required": False, "reason": f"The uploaded document could not satisfy the '{expected_document_type}' requirement because it is not an image file containing visual evidence."}
+        # An image upload is evidence preservation, not semantic proof that it
+        # depicts damage or a spare key.  Do not auto-approve on that basis.
+        return {"expected_document_type": expected_document_type, "detected_document_type": "Visual Image", "validation_passed": None, "confidence": None, "manual_review_required": True, "reason": f"Manual review is required because the uploaded image must be visually confirmed as '{expected_document_type}'; successful upload or processing strategy is not proof of its content."}
     haystack = " ".join((raw_text or "", " ".join(str(key).replace("_", " ") for key in (structured_data or {})))).lower()
     scores = {document_type: sum(hint in haystack for hint in hints) for document_type, hints in _TYPE_HINTS.items()}
     detected_type, score = max(scores.items(), key=lambda item: item[1])
     if score == 0:
-        return {"expected_document_type": expected_document_type, "detected_document_type": None, "validation_passed": None, "confidence": None, "reason": "The extracted content does not provide reliable document-type evidence; manual review may be required."}
+        return {"expected_document_type": expected_document_type, "detected_document_type": None, "validation_passed": None, "confidence": None, "manual_review_required": True, "reason": f"Manual review is required because the extracted content does not provide reliable evidence that it is the required {expected_document_type}."}
     expected_profile = _document_profile(expected_document_type)
     expected_score = scores.get(expected_profile, 0) if expected_profile else 0
     passed = detected_type == expected_profile and expected_score > 0
-    return {"expected_document_type": expected_document_type, "detected_document_type": expected_document_type if passed else detected_type, "validation_passed": passed, "confidence": min(1.0, score / 3), "reason": "Document content is consistent with the expected upload field." if passed else f"Document content appears to be {detected_type}, not {expected_document_type}."}
+    return {"expected_document_type": expected_document_type, "detected_document_type": expected_document_type if passed else detected_type, "validation_passed": passed, "confidence": min(1.0, score / 3), "manual_review_required": False, "reason": f"The document was validated as {expected_document_type} based on extracted document evidence." if passed else f"The uploaded document could not satisfy the '{expected_document_type}' requirement because the extracted content indicates it is {detected_type}."}
+
+
+def _detect_text_document_type(raw_text: str, structured_data: dict[str, Any] | None) -> str | None:
+    haystack = " ".join((raw_text or "", " ".join(str(key).replace("_", " ") for key in (structured_data or {})))).lower()
+    matches = [(sum(hint in haystack for hint in hints), kind) for kind, hints in _TYPE_HINTS.items()]
+    score, kind = max(matches, default=(0, None))
+    return kind if score else None
 
 
 def present_document_validation(validation: dict[str, Any] | None) -> dict[str, Any]:
@@ -110,7 +121,7 @@ def build_claim_processing_summary(required_documents: list[dict[str, Any]], doc
         outcome, manual_review = "incomplete", False
     elif consistency["has_conflicts"]:
         outcome, manual_review = "conflicting_information", True
-    elif any((item.get("validation") or {}).get("validation_passed") is None for item in documents if item.get("document_type") not in VISUAL_EVIDENCE_DOCUMENT_TYPES):
+    elif any((item.get("validation") or {}).get("validation_passed") is None for item in documents):
         outcome, manual_review = "manual_review_required", True
     else:
         outcome, manual_review = "ready_for_processing", False

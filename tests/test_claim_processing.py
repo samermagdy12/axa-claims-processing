@@ -4,6 +4,14 @@ from app.claim_processing import build_claim_processing_summary, check_cross_doc
 
 
 class ClaimProcessingTests(unittest.TestCase):
+    def test_visual_slot_never_trusts_the_upload_slot_or_strategy(self):
+        wrong = validate_document("Photos of Damage", "REPAIR ESTIMATE\nTotal Amount: EGP 5,000", {"total": 5000}, mime_type="application/pdf", processing_strategy="visual_evidence_preserved")
+        self.assertFalse(wrong["validation_passed"])
+        self.assertIn("not an image", wrong["reason"])
+        uncertain = validate_document("Photos of Damage", "", {}, mime_type="image/jpeg", processing_strategy="visual_evidence_preserved")
+        self.assertIsNone(uncertain["validation_passed"])
+        self.assertTrue(uncertain["manual_review_required"])
+
     def test_validation_detects_a_wrong_document_type(self):
         result = validate_document("Repair Estimate", "MEDICAL REPORT\nPatient: Mona Adel\nDiagnosis: Minor injury", {"patient_name": "Mona Adel", "diagnosis": "Minor injury"})
         self.assertFalse(result["validation_passed"])

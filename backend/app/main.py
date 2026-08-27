@@ -348,7 +348,7 @@ def extract_claim_document(
         "raw_extraction": {"text": extracted.text, **({"document_structure": extracted.structure} if extracted.structure else {})},
         "structured_data": structured_data,
         "normalized_data": normalize_document_data(document["document_type"], structured_data),
-        "document_validation": validate_document(document["document_type"], extracted.text, structured_data),
+        "document_validation": validate_document(document["document_type"], extracted.text, structured_data, mime_type=document["mime_type"], processing_strategy=extracted.strategy),
         "text_length": len(extracted.text),
     }
     try:

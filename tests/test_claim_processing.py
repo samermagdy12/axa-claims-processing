@@ -12,6 +12,14 @@ class ClaimProcessingTests(unittest.TestCase):
         self.assertIsNone(uncertain["validation_passed"])
         self.assertTrue(uncertain["manual_review_required"])
 
+    def test_visual_analysis_has_explicit_pass_fail_and_uncertain_thresholds(self):
+        valid = validate_document("Photos of Damage", "", {"detected_document_type": "Photos of Damage", "content_matches_expected": True, "confidence": .95, "reason": "Vehicle collision damage is visible."}, mime_type="image/jpeg")
+        self.assertTrue(valid["validation_passed"])
+        invalid = validate_document("Photos of Damage", "", {"detected_document_type": "Driver's Licence", "content_matches_expected": False, "confidence": .95, "reason": "An ID card is visible."}, mime_type="image/jpeg")
+        self.assertFalse(invalid["validation_passed"])
+        unclear = validate_document("Photos of Damage", "", {"content_matches_expected": True, "confidence": .5}, mime_type="image/jpeg")
+        self.assertIsNone(unclear["validation_passed"])
+
     def test_validation_detects_a_wrong_document_type(self):
         result = validate_document("Repair Estimate", "MEDICAL REPORT\nPatient: Mona Adel\nDiagnosis: Minor injury", {"patient_name": "Mona Adel", "diagnosis": "Minor injury"})
         self.assertFalse(result["validation_passed"])

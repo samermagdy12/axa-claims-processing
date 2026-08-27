@@ -34,9 +34,16 @@ def validate_document(expected_document_type: str, raw_text: str, structured_dat
     if expected_document_type in VISUAL_EVIDENCE_DOCUMENT_TYPES:
         if not (mime_type or "").lower().startswith("image/"):
             return {"expected_document_type": expected_document_type, "detected_document_type": _detect_text_document_type(raw_text, structured_data), "validation_passed": False, "confidence": None, "manual_review_required": False, "reason": f"The uploaded document could not satisfy the '{expected_document_type}' requirement because it is not an image file containing visual evidence."}
-        # An image upload is evidence preservation, not semantic proof that it
-        # depicts damage or a spare key.  Do not auto-approve on that basis.
-        return {"expected_document_type": expected_document_type, "detected_document_type": "Visual Image", "validation_passed": None, "confidence": None, "manual_review_required": True, "reason": f"Manual review is required because the uploaded image must be visually confirmed as '{expected_document_type}'; successful upload or processing strategy is not proof of its content."}
+        visual = structured_data or {}
+        detected = visual.get("detected_document_type")
+        matches, confidence = visual.get("content_matches_expected"), visual.get("confidence")
+        confidence = float(confidence) if isinstance(confidence, (int, float)) and 0 <= confidence <= 1 else None
+        reason = str(visual.get("reason") or "").strip()
+        if matches is True and confidence is not None and confidence >= 0.75:
+            return {"expected_document_type": expected_document_type, "detected_document_type": detected or expected_document_type, "content_matches_expected": True, "confidence": confidence, "validation_passed": True, "manual_review_required": False, "reason": reason or f"The uploaded image clearly matches the required {expected_document_type}."}
+        if matches is False and confidence is not None and confidence >= 0.75:
+            return {"expected_document_type": expected_document_type, "detected_document_type": detected or "Unrelated image", "content_matches_expected": False, "confidence": confidence, "validation_passed": False, "manual_review_required": False, "reason": reason or f"The uploaded image does not match the required {expected_document_type}."}
+        return {"expected_document_type": expected_document_type, "detected_document_type": detected or "Unknown", "content_matches_expected": None, "confidence": confidence, "validation_passed": None, "manual_review_required": True, "reason": reason or f"Manual review is required because the uploaded image could not be confidently verified as {expected_document_type}."}
     haystack = " ".join((raw_text or "", " ".join(str(key).replace("_", " ") for key in (structured_data or {})))).lower()
     scores = {document_type: sum(hint in haystack for hint in hints) for document_type, hints in _TYPE_HINTS.items()}
     detected_type, score = max(scores.items(), key=lambda item: item[1])

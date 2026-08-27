@@ -518,9 +518,9 @@ Total Amount: EGP 1140""")
         self.assertEqual(result.text.splitlines(), ["رقم الوثيقة", "Policy Number: POL-88"])
         self.assertEqual(result.structure["reading_order"], "top_to_bottom_left_to_right")
 
-    def test_visual_evidence_is_preserved_without_misrepresenting_ocr(self):
+    def test_visual_evidence_provider_failure_is_retained_for_safe_validation(self):
         result = extract_document_content(Path("photo.jpg"), "image/jpeg", "Photos of Damage")
-        self.assertEqual(result.strategy, "visual_evidence_preserved")
+        self.assertEqual(result.strategy, "visual_content_analysis")
         self.assertEqual(result.text, "")
         self.assertIsNone(result.confidence)
 

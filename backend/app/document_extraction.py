@@ -38,6 +38,13 @@ class ExtractedDocument:
 
 def extract_document_content(path: Path, mime_type: str, document_type: str) -> ExtractedDocument:
     if document_type in VISUAL_EVIDENCE_DOCUMENT_TYPES:
+        # Visual evidence must be inspected, not accepted merely because it
+        # was uploaded to a visual-evidence slot.
+        if (mime_type or "").lower() in IMAGE_MIME_TYPES or path.suffix.lower() in IMAGE_SUFFIXES:
+            try:
+                return _extract_image_text(path, strategy="visual_content_analysis", expected_document_type=document_type)
+            except DocumentExtractionError:
+                return ExtractedDocument(strategy="visual_content_analysis", text="", confidence=None, structured_data={})
         return ExtractedDocument(strategy="visual_evidence_preserved", text="", confidence=None)
 
     suffix = path.suffix.lower()
@@ -86,17 +93,17 @@ def _extract_scanned_pdf_text(path: Path) -> ExtractedDocument:
             image.close()
 
 
-def _extract_image_text(path: Path, strategy: str) -> ExtractedDocument:
+def _extract_image_text(path: Path, strategy: str, expected_document_type: str | None = None) -> ExtractedDocument:
     try:
         logger.info("Trying OpenRouter OCR for image")
-        extracted = _openrouter_image_ocr(path, strategy)
+        extracted = _openrouter_image_ocr(path, strategy, expected_document_type) if expected_document_type else _openrouter_image_ocr(path, strategy)
         logger.info("OpenRouter OCR succeeded")
         return extracted
     except Exception as exc:
         logger.warning("OpenRouter OCR failed, falling back to Groq: %s", exc)
     try:
         logger.info("Trying Groq OCR fallback")
-        extracted = _groq_image_ocr(path, strategy)
+        extracted = _groq_image_ocr(path, strategy, expected_document_type) if expected_document_type else _groq_image_ocr(path, strategy)
         logger.info("Groq OCR succeeded")
         return extracted
     except Exception as fallback_exc:
@@ -104,12 +111,12 @@ def _extract_image_text(path: Path, strategy: str) -> ExtractedDocument:
         raise DocumentExtractionError("OCR could not read the image") from fallback_exc
 
 
-def _openrouter_image_ocr(path: Path, strategy: str) -> ExtractedDocument:
+def _openrouter_image_ocr(path: Path, strategy: str, expected_document_type: str | None = None) -> ExtractedDocument:
     api_key = settings.OPENROUTER_API_KEY
     model = settings.OPENROUTER_VISION_MODEL
     if not api_key or not model:
         raise DocumentExtractionError("OpenRouter OCR is not configured")
-    payload = _vision_request_payload(path, model)
+    payload = _vision_request_payload(path, model, expected_document_type)
     response = _openrouter_http_client().post(
         OPENROUTER_CHAT_COMPLETIONS_URL,
         headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
@@ -130,12 +137,12 @@ def _openrouter_http_client():
     return httpx.Client(timeout=settings.OCR_API_TIMEOUT_SECONDS)
 
 
-def _groq_image_ocr(path: Path, strategy: str) -> ExtractedDocument:
+def _groq_image_ocr(path: Path, strategy: str, expected_document_type: str | None = None) -> ExtractedDocument:
     api_key = settings.GROQ_API_KEY
     model = settings.GROQ_VISION_MODEL
     if not api_key or not model:
         raise DocumentExtractionError("Groq OCR is not configured")
-    completion = _groq_client().chat.completions.create(**_vision_request_payload(path, model))
+    completion = _groq_client().chat.completions.create(**_vision_request_payload(path, model, expected_document_type))
     try:
         content = completion.choices[0].message.content
     except (AttributeError, IndexError, TypeError) as exc:
@@ -238,7 +245,7 @@ def _structured_data_from_response(content: Any) -> dict[str, Any] | None:
     return structured_data if isinstance(structured_data, dict) and structured_data else None
 
 
-def _vision_request_payload(path: Path, model: str) -> dict[str, Any]:
+def _vision_request_payload(path: Path, model: str, expected_document_type: str | None = None) -> dict[str, Any]:
     media_type = IMAGE_MEDIA_TYPES.get(path.suffix.lower())
     if media_type is None:
         raise DocumentExtractionError("This image type is not supported for OCR")
@@ -251,7 +258,7 @@ def _vision_request_payload(path: Path, model: str) -> dict[str, Any]:
         "temperature": 0,
         "response_format": {"type": "json_object"},
         "messages": [{"role": "user", "content": [
-            {"type": "text", "text": _VISION_OCR_PROMPT},
+            {"type": "text", "text": _VISION_OCR_PROMPT + (f"\n\nExpected document requirement: {expected_document_type}. Also return structured_data with detected_document_type, content_matches_expected (true/false/null), confidence (0..1), and reason based on the actual image. For Photos of Damage, confirm both a vehicle and visible damage before content_matches_expected=true." if expected_document_type else "")},
             {"type": "image_url", "image_url": {"url": f"data:{media_type};base64,{image_data}"}},
         ]}],
     }
@@ -270,12 +277,12 @@ def _vision_response_to_extracted_document(content: Any, strategy: str, provider
     text = _normalise_text(str(payload.get("text") or ""))
     if not text:
         text = _normalise_text("\n".join(block["text"] for block in blocks))
-    if not text:
+    structured_data = payload.get("structured_data")
+    if not text and not isinstance(structured_data, dict):
         raise DocumentExtractionError(f"{provider} returned empty OCR text")
     if not blocks:
         blocks = [{"type": "text", "text": text, "confidence": None, "bbox": None, "language_pass": provider}]
     confidences = [block["confidence"] for block in blocks if block["confidence"] is not None]
-    structured_data = payload.get("structured_data")
     return ExtractedDocument(strategy=strategy, text=text, confidence=sum(confidences) / len(confidences) if confidences else None, structure={
         "version": 1,
         "reading_order": "top_to_bottom_left_to_right",
